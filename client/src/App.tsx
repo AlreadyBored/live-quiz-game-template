@@ -143,10 +143,6 @@ function App() {
     sendMessage('start_game', { gameId });
   };
 
-  const handleAddBot = () => {
-    sendMessage('add_bot', { gameId });
-  };
-
   const handleAnswer = (answerIndex: number) => {
     if (currentQuestion && !hasAnswered) {
       sendMessage('answer', {
@@ -216,7 +212,6 @@ function App() {
           players={players}
           isHost={isHost}
           onStartGame={handleStartGame}
-          onAddBot={handleAddBot}
         />
       )}
       {screen === 'game-play' && currentQuestion && (

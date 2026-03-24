@@ -5,7 +5,6 @@ interface LobbyProps {
   players: Player[];
   isHost: boolean;
   onStartGame: () => void;
-  onAddBot: () => void;
 }
 
 export const Lobby = ({
@@ -13,7 +12,6 @@ export const Lobby = ({
   players,
   isHost,
   onStartGame,
-  onAddBot,
 }: LobbyProps) => {
   return (
     <div style={styles.container}>
@@ -39,9 +37,6 @@ export const Lobby = ({
 
       {isHost && (
         <div style={styles.hostControls}>
-          <button onClick={onAddBot} style={styles.addBotButton}>
-            Add Bot Player
-          </button>
           <button
             onClick={onStartGame}
             disabled={players.length < 1}
@@ -142,15 +137,6 @@ const styles = {
     gap: '1rem',
     flexWrap: 'wrap' as const,
     justifyContent: 'center',
-  },
-  addBotButton: {
-    padding: '12px 24px',
-    backgroundColor: '#6c757d',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '1rem',
   },
   startButton: {
     padding: '12px 24px',

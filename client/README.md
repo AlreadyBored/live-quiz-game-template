@@ -36,7 +36,7 @@ npm run build   # production build
 
 ### Lobby
 - Displays room code (for sharing) and connected player list
-- Host sees "Add Bot Player" and "Start Game" buttons
+- Host sees "Start Game" button
 - Listens for `player_joined` and `update_players` broadcasts
 
 ### Game Play
