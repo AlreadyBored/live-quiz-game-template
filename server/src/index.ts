@@ -1,4 +1,7 @@
 import { WebSocketServer } from 'ws';
+import { WSMessage } from './types';
+import { handlerMessage } from './handlers/mainHandler';
+import { WS_TO_USER } from './store/store';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -9,11 +12,19 @@ wss.on('connection', (ws) => {
   console.log('Connected');
 
   ws.on('message', (msg) => {
-    console.log('Message:', msg.toString());
+    try {
+      const data = JSON.parse(msg.toString());
+
+      handlerMessage(ws, data);
+    } catch (error) {
+      console.log('Invalid JSON');
+      return;
+    }
   });
 
   ws.on('close', () => {
-    console.log('Close client');
+    const userName = WS_TO_USER.get(ws);
+    WS_TO_USER.delete(ws);
   });
 });
 

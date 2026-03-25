@@ -1,0 +1,47 @@
+import { WSMessage } from '../types';
+import { WebSocket } from 'ws';
+import { regHandler } from './regHandler';
+
+export const handlerMessage = (ws: WebSocket, message: WSMessage) => {
+  const { type, data } = message;
+
+  switch (type) {
+    case 'reg':
+      regHandler(ws, data);
+      break;
+
+    case 'game_created':
+      break;
+
+    case 'game_joined':
+      break;
+
+    case 'player_joined':
+      break;
+
+    case 'update_players':
+      break;
+
+    case 'answer_accepted':
+      // confirmation from server — we already set hasAnswered optimistically
+      break;
+
+    case 'question':
+      //   setCurrentQuestion(data as QuestionMessage);
+      break;
+
+    case 'question_result':
+      //   setQuestionResult(data as QuestionResultMessage);
+      break;
+
+    case 'game_finished':
+      //   setFinalResults(data as GameFinishedMessage);
+      break;
+
+    case 'error':
+      break;
+
+    default:
+      console.log('Unhandled message type:', type);
+  }
+};
