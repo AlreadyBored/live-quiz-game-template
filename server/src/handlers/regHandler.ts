@@ -1,8 +1,8 @@
-import { WebSocket } from 'ws';
 import { USERS, WS_TO_USER } from '../store/store';
 import { randomUUID } from 'node:crypto';
+import { WebSocketType } from '../types';
 
-const createNewUser = (ws: WebSocket, data: any) => {
+const createNewUser = (ws: WebSocketType, data: any) => {
   const { name, password } = data;
 
   const newUser = {
@@ -17,7 +17,7 @@ const createNewUser = (ws: WebSocket, data: any) => {
   return newUser;
 };
 
-export const regHandler = (ws: WebSocket, data: any) => {
+export const regHandler = (ws: WebSocketType, data: any) => {
   const { name, password } = data;
 
   const user = USERS.get(name) || createNewUser(ws, data);

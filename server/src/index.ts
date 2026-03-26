@@ -1,5 +1,4 @@
 import { WebSocketServer } from 'ws';
-import { WSMessage } from './types';
 import { handlerMessage } from './handlers/mainHandler';
 import { WS_TO_USER } from './store/store';
 

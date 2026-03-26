@@ -1,16 +1,18 @@
 import { WSMessage } from '../types';
 import { WebSocket } from 'ws';
 import { regHandler } from './regHandler';
+import { createGameHadler } from './createGameHadler';
 
 export const handlerMessage = (ws: WebSocket, message: WSMessage) => {
   const { type, data } = message;
-
+  console.log('type!!!!!!!', type);
   switch (type) {
     case 'reg':
       regHandler(ws, data);
       break;
 
-    case 'game_created':
+    case 'create_game':
+      createGameHadler(ws, data);
       break;
 
     case 'game_joined':

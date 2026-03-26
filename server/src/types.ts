@@ -65,3 +65,5 @@ export interface AnswerData {
   questionIndex: number;
   answerIndex: number;
 }
+
+export type WebSocketType = WebSocket;
