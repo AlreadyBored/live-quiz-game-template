@@ -26,7 +26,7 @@ type Screen =
   | 'question-result'
   | 'final-results';
 
-const WS_URL = 'ws://localhost:3000';
+const WS_URL = 'ws://localhost:7001';
 
 function App() {
   const { isConnected, lastMessage, sendMessage } = useWebSocket(WS_URL);
