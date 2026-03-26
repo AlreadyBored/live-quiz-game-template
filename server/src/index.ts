@@ -1,4 +1,5 @@
 import { WebSocketServer } from "ws";
+import { WSMessage } from "./types";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -9,20 +10,60 @@ wss.on("connection", (ws, request) => {
   console.log("Client connected");
 
   ws.on("message", (message) => {
-    console.log("Received:", message.toString());
+    const req: WSMessage = JSON.parse(message.toString());
+    console.log("Received:", req);
 
-    ws.send(
-      JSON.stringify({
-        type: "reg",
-        data: {
-          name: "Ksu",
-          index: 0,
-          error: false,
-          errorText: "",
-        },
-        id: 0,
-      }),
-    );
+    if (req.type === "reg") {
+      ws.send(
+        JSON.stringify({
+          type: "reg",
+          data: {
+            name: "Ksu",
+            index: 0,
+            error: false,
+            errorText: "",
+          },
+          id: 0,
+        }),
+      );
+    }
+
+    if (req.type === "create_game") {
+      ws.send(
+        JSON.stringify({
+          type: "game_created",
+          data: {
+            gameId: "1",
+            code: "12344CSD",
+          },
+          id: 0,
+        }),
+      );
+    }
+
+    if (req.type === "join_game") {
+      ws.send(
+        JSON.stringify({
+          type: "game_joined",
+          data: {
+            gameId: "1",
+          },
+          id: 0,
+        }),
+      );
+    }
+
+    if (req.type === "answer") {
+      ws.send(
+        JSON.stringify({
+          type: "answer_accepted",
+          data: {
+            questionIndex: 1,
+          },
+          id: 0,
+        }),
+      );
+    }
   });
 
   ws.on("close", () => {
