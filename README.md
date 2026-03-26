@@ -1,10 +1,5 @@
-# Assignment: WebSocket Live Quiz Game
+# WebSocket Live Quiz Game
 
-## What to do
-
-1. **Fork** this repository
-2. **Implement** the WebSocket server in the `server/` folder
-3. The **client** (React frontend) in `client/` is already fully implemented and ready to use — do not modify it
 
 ## Project structure
 
@@ -33,15 +28,6 @@ npm run start:server   # server only (ws://localhost:3000)
 npm run start:client   # client only (http://localhost:5173)
 ```
 
-## What is provided in `server/`
-
-- **`src/types.ts`** — all TypeScript interfaces you need: `Player`, `Question`, `Game`, `User`, `WSMessage`, and request data types (`RegData`, `CreateGameData`, `JoinGameData`, `StartGameData`, `AnswerData`)
-- **`src/index.ts`** — starter code that creates a `WebSocketServer` on port 3000. You need to implement all message handlers here
-- **`package.json`** — dependencies already configured (`ws`, `dotenv`, TypeScript tooling)
-
-## What you need to implement
-
-Your server must handle all WebSocket commands described in the assignment specification. The client expects the following message protocol (all messages are JSON strings with `{ type, data, id: 0 }` format):
 
 **Client → Server commands:**
 - `reg` — register or login a player
