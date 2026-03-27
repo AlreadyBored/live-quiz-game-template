@@ -9,12 +9,19 @@ const wss = new WebSocketServer({ port: PORT })
 
 wss.on("connection", function connection(ws) {
   ws.on("message", function incoming(rawMessage) {
-    const message = JSON.parse(
-      rawMessage.toString("utf8")
-    ) as unknown as WSMessage
+    try {
+      const message = JSON.parse(
+        rawMessage.toString("utf8")
+      ) as unknown as WSMessage
 
-    const response = processMessage(ws, message)
+      const response = processMessage(ws, message)
 
-    ws.send(JSON.stringify(response))
+      ws.send(JSON.stringify(response))
+    } catch (err) {
+      console.log(err)
+      ws.send(
+        JSON.stringify({ type: "error", message: "An error has ocurred" })
+      )
+    }
   })
 })

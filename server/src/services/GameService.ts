@@ -17,7 +17,11 @@ class GameService {
   }
 
   registerGame(game: Game) {
-    this.games[game.id] = game
+    this.games[game.code] = game
+  }
+
+  findGame(code: string) {
+    return this.games[code]
   }
 }
 

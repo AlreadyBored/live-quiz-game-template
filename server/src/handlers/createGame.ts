@@ -2,9 +2,12 @@ import gameService from "../services/GameService"
 import { WSMessage } from "../types"
 
 export function createGame(message: WSMessage) {
-  const { id, questions } = message.data
+  const {
+    id,
+    data: { questions },
+  } = message
 
-  const game = gameService.generateGame(id, questions)
+  const game = gameService.generateGame(`${id}`, questions)
   gameService.registerGame(game)
 
   return {

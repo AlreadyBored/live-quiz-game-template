@@ -20,4 +20,8 @@ export class Game implements GameInterface {
     this.status = "waiting"
     this.playerAnswers = new Map()
   }
+
+  addPlayerToGame(player: Player) {
+    this.players.push(player)
+  }
 }

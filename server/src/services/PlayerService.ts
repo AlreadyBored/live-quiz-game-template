@@ -15,7 +15,11 @@ class PlayerService {
   }
 
   registerPlayer(player: Player) {
-    this.players.set(player.ws, player)
+    this.players.set(player.ws!, player)
+  }
+
+  getPlayer(ws: WebSocket) {
+    return this.players.get(ws)
   }
 }
 
