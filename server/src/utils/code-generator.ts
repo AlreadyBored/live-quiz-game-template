@@ -1,4 +1,4 @@
-import { games } from '../storage.js';
+import { games } from '../storage/games.js';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
 const CODE_LENGTH = 6;

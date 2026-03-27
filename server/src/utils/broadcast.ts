@@ -1,8 +1,10 @@
 import { WebSocket } from 'ws';
 import { games, getPlayersInGame } from '../storage/games.js';
-import { OutgoingMessage } from '../types.js';
+import { OUTGOING_MESSAGES } from './consts.js';
+import { WSMessage } from '../types.js';
+import { players } from '../storage/players.js';
 
-export function sendToPlayer(ws: WebSocket, message: OutgoingMessage): void {
+export function sendToPlayer(ws: WebSocket, message: WSMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(message));
         console.log(`[Broadcast] Sent to player: ${message.type}`);
@@ -13,7 +15,7 @@ export function sendToPlayer(ws: WebSocket, message: OutgoingMessage): void {
 
 export function broadcastToGame(
     gameId: string, 
-    message: OutgoingMessage, 
+    message: WSMessage, 
     excludeWs?: WebSocket
 ): void {
     const game = games.get(gameId);
@@ -34,6 +36,13 @@ export function broadcastToGame(
             sentCount++;
         }
     }
+
+    const hostPlayer = players.get(game.hostId);
+    if (hostPlayer?.ws && hostPlayer.ws !== excludeWs && hostPlayer.ws.readyState === WebSocket.OPEN) {
+        hostPlayer.ws.send(JSON.stringify(message));
+        sentCount++;
+    }
+    
     
     console.log(`[Broadcast] Sent ${message.type} to ${sentCount} players in game ${gameId}`);
 }
@@ -42,7 +51,7 @@ export function broadcastUpdatePlayers(gameId: string): void {
     const playersList = getPlayersInGame(gameId);
     
     broadcastToGame(gameId, {
-        type: 'update_players',
+        type: OUTGOING_MESSAGES.UPDATE_PLAYERS,
         data: playersList.map(p => ({
             name: p.name,
             index: p.index,

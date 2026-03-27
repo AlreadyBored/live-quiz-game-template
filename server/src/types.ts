@@ -25,7 +25,7 @@ export interface Game {
   questions: Question[];
   players: Player[];
   currentQuestion: number;
-  status: 'waiting' | 'in_progress' | 'finished';
+  status: GameStatus;
   questionStartTime?: number;
   questionTimer?: NodeJS.Timeout;
   playerAnswers: Map<string, { answerIndex: number; timestamp: number }>;
@@ -40,7 +40,7 @@ export interface User {
 
 export interface WSMessage {
   type: OutgoingMessageType | IncomingMessageType;
-  data: any;
+  data: RegData | CreateGameData | JoinGameData | StartGameData | AnswerData | any;
   id: 0;
 }
 

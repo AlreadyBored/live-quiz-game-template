@@ -6,7 +6,7 @@ import {
     getPlayersInGame
 } from './storage/players.js';
 import { broadcastToGame } from './utils/broadcast.js';
-import { handleMessage } from './handlers/index.js';
+import { handleMessage } from './handlers/message-handler.js';
 import { games } from './storage/games.js';
 
 

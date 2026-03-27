@@ -1,13 +1,12 @@
 
 import { WebSocket } from 'ws';
-import { RegData, Player, User } from '../types.js';
+import { RegData, Player, User, WSMessage } from '../types.js';
 import { 
     players, 
     savePlayer, 
-    saveUser, 
-    getUserByName
-} from '../storage.js';
+} from '../storage/players.js';
 import { OUTGOING_MESSAGES } from '../utils/consts.js';
+import { getUserByName, saveUser } from '../storage/users.js';
 
 function generatePlayerIndex(): string {
     const timestamp = Date.now();
@@ -31,12 +30,10 @@ function sendSuccessResponse(ws: WebSocket, name: string, index: string): void {
     console.log(`[Registration] Success response sent for ${name}`);
 }
 
-function sendErrorResponse(ws: WebSocket, errorText: string): void {
+export function sendErrorResponse(ws: WebSocket, errorText: string): void {
     const response = {
-        type: OUTGOING_MESSAGES.REG,
+        type: OUTGOING_MESSAGES.ERROR,
         data: {
-            name: '',
-            index: '',
             error: true,
             errorText: errorText
         },
@@ -47,8 +44,8 @@ function sendErrorResponse(ws: WebSocket, errorText: string): void {
     console.log(`[Registration] Error response sent: ${errorText}`);
 }
 
-export function handleRegister(ws: WebSocket, data: RegData): void {
-    const { name, password } = data;
+export function handleRegister(ws: WebSocket, message: WSMessage): void {
+    const { name, password } = message.data;
     
     console.log(`[Registration] Attempt - Name: ${name}`);
 
@@ -63,9 +60,17 @@ export function handleRegister(ws: WebSocket, data: RegData): void {
     }
 
     const trimmedName = name.trim();
+
+    
     const existingUser = getUserByName(trimmedName);
     
     if (existingUser) {
+        if (existingUser.ws && existingUser.ws.readyState === WebSocket.OPEN) {
+            console.log(`[Registration] User ${trimmedName} already connected`);
+            sendErrorResponse(ws, 'User already logged in from another connection');
+            return;
+        }
+        
         if (existingUser.password !== password) {
             sendErrorResponse(ws, 'Invalid password');
             return;
@@ -88,6 +93,9 @@ export function handleRegister(ws: WebSocket, data: RegData): void {
             savePlayer(newPlayer);
         } else {
             existingPlayer.ws = ws;
+            existingPlayer.hasAnswered = false;
+            existingPlayer.answerTime = undefined;
+            existingPlayer.answeredCorrectly = false;
         }
         
         sendSuccessResponse(ws, trimmedName, existingUser.index);

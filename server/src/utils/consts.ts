@@ -1,13 +1,8 @@
-export const BASE_POINTS = 1000;
-export const CODE_LENGTH = 6;
-
 export const GAME_STATUSES = {
     WAITING: 'waiting',
     IN_PROGRESS: 'in_progress',
     FINISHED: 'finished',
 } as const;
-
-export type GameStatus = typeof GAME_STATUSES[keyof typeof GAME_STATUSES];
 
 export const INCOMING_MESSAGES = {
     REG: 'reg',
@@ -27,7 +22,6 @@ export const OUTGOING_MESSAGES = {
     ANSWER_ACCEPTED: 'answer_accepted',
     QUESTION_RESULT: 'question_result',
     GAME_FINISHED: 'game_finished',
+    ERROR: 'error'
 } as const;
 
-export type IncomingMessageType = typeof INCOMING_MESSAGES[keyof typeof INCOMING_MESSAGES];
-export type OutgoingMessageType = typeof OUTGOING_MESSAGES[keyof typeof OUTGOING_MESSAGES];
