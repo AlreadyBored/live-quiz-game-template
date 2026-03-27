@@ -1,13 +1,12 @@
 import { WebSocketServer } from 'ws';
-import { setupWebSocketServer } from './server';
-import { setupRestApi } from './rest';
+import { setupWebSocketServer } from './server.js';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 const wss = new WebSocketServer({ port: PORT });
 
 setupWebSocketServer(wss);
-setupRestApi().catch((err) => console.error('[REST Error]', err));
 
 console.log(`
 ╔══════════════════════════════════════════════════════════╗
@@ -16,7 +15,6 @@ console.log(`
 ║  Server started at: ${new Date().toISOString()}             ║
 ║  Address: ws://localhost:${PORT}                            ║ 
 ║  Port: ${PORT}                                              ║
-║  REST: http://localhost:${process.env.FASTIFY_PORT || 3000}                 ║
 ╚══════════════════════════════════════════════════════════╝
 `);
 

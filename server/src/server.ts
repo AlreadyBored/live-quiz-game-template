@@ -1,15 +1,13 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { User, Game, WSMessage, Player } from './types';
+import { WSMessage, Player } from './types.js';
 import {
-    users,
     players, 
-    games,
-    deleteSession,
     removePlayerFromAllGames,
     getPlayersInGame
-} from './storage';
-import { broadcastToGame } from './broadcast';
-import { handleMessage } from './handlers';
+} from './storage/players.js';
+import { broadcastToGame } from './utils/broadcast.js';
+import { handleMessage } from './handlers/index.js';
+import { games } from './storage/games.js';
 
 
 export function setupWebSocketServer(wss: WebSocketServer): void {
