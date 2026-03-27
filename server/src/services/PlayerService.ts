@@ -1,20 +1,21 @@
+import type { WebSocket } from "ws"
 import { Player } from "../entities/Player"
 import { CodeGenerator } from "./CodeGenerator"
 
 class PlayerService {
-  players: { [key: string]: Player }
+  players: Map<WebSocket, Player>
 
   constructor() {
-    this.players = {}
+    this.players = new Map()
   }
 
-  generatePlayer(name: string) {
+  generatePlayer(ws: WebSocket, name: string) {
     const playerIndex = CodeGenerator.generatePlayerIndex()
-    return new Player(name, playerIndex)
+    return new Player(ws, name, playerIndex)
   }
 
   registerPlayer(player: Player) {
-    this.players[player.index] = player
+    this.players.set(player.ws, player)
   }
 }
 

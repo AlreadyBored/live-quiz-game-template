@@ -1,10 +1,11 @@
+import { WebSocket } from "ws"
 import playerService from "../services/PlayerService"
 import { WSMessage } from "../types"
 
-export function registerUser(message: WSMessage) {
+export function registerUser(ws: WebSocket, message: WSMessage) {
   const { name } = message.data
 
-  const player = playerService.generatePlayer(name)
+  const player = playerService.generatePlayer(ws, name)
   playerService.registerPlayer(player)
 
   return {

@@ -13,7 +13,7 @@ wss.on("connection", function connection(ws) {
       rawMessage.toString("utf8")
     ) as unknown as WSMessage
 
-    const response = processMessage(message)
+    const response = processMessage(ws, message)
 
     ws.send(JSON.stringify(response))
   })
