@@ -1,4 +1,5 @@
 import { Game, Player } from '../types.js';
+import { GAME_STATUSES } from '../utils/consts.js';
 
 export const games = new Map<string, Game>();
 
@@ -19,45 +20,12 @@ export function findGameByCode(code: string): Game | undefined {
     return undefined;
 }
 
-export function deleteGame(id: string): boolean {
-    return games.delete(id);
-}
-
 export function updateGameStatus(id: string, status: Game['status']): boolean {
     const game = games.get(id);
     if (!game) return false;
     
     game.status = status;
     return true;
-}
-
-export function nextQuestion(id: string): boolean {
-    const game = games.get(id);
-    if (!game) return false;
-    
-    game.currentQuestion++;
-    return true;
-}
-
-export function addPlayerToGame(gameId: string, player: Player): boolean {
-    const game = games.get(gameId);
-    if (!game) return false;
-    
-    const exists = game.players.some(p => p.index === player.index);
-    if (exists) return false;
-    
-    game.players.push(player);
-    return true;
-}
-
-export function removePlayerFromGame(gameId: string, playerIndex: string): boolean {
-    const game = games.get(gameId);
-    if (!game) return false;
-    
-    const initialLength = game.players.length;
-    game.players = game.players.filter(p => p.index !== playerIndex);
-    
-    return initialLength !== game.players.length;
 }
 
 export function getPlayersInGame(gameId: string): Player[] {
@@ -80,19 +48,11 @@ export function removePlayerFromAllGames(playerIndex: string): string[] {
             game.players = game.players.filter(p => p.index !== playerIndex);
             affectedGames.push(gameId);
             
-            if (game.status === 'in_progress' && game.players.length === 0) {
-                game.status = 'finished';
+            if (game.status === GAME_STATUSES.IN_PROGRESS && game.players.length === 0) {
+                game.status = GAME_STATUSES.FINISHED;
             }
         }
     }
     
     return affectedGames;
-}
-
-export function getAllGames(): Game[] {
-    return Array.from(games.values());
-}
-
-export function clearGames(): void {
-    games.clear();
 }

@@ -1,38 +1,10 @@
 import { Game } from '../types.js';
-import { getPlayer } from '../storage/players.js';
+import { getPlayer, players } from '../storage/players.js';
 import { OUTGOING_MESSAGES } from '../utils/consts.js';
 import { broadcastToGame } from '../utils/broadcast.js';
 import { startTimer, stopTimer } from './timer-handler.js';
 import { finishGame } from './game-handler.js';
 import { calculatePoints } from '../utils/score-calculator.js';
-
-export function sendQuestion(game: Game): void {
-    if (!game.questions[game.currentQuestion]) return;
-    
-    const question = game.questions[game.currentQuestion];
-    game.questionStartTime = Date.now();
-    
-    for (const player of game.players) {
-        const p = getPlayer(player.index);
-        if (p) {
-            p.hasAnswered = false;
-            p.answerTime = undefined;
-            p.answeredCorrectly = false;
-        }
-    }
-    
-    broadcastToGame(game.id, {
-        type: OUTGOING_MESSAGES.QUESTION,
-        data: {
-            questionNumber: game.currentQuestion + 1,
-            totalQuestions: game.questions.length,
-            text: question.text,
-            options: question.options,
-            timeLimitSec: question.timeLimitSec
-        },
-        id: 0
-    });
-}
 
 export function getQuestionResults(game: Game) {
     const currentQuestion = game.questions[game.currentQuestion];
@@ -119,8 +91,9 @@ export function finalizeQuestion(game: Game): void {
             sendNextQuestion(game);
         }, 5000);
     } else {
-
+    setTimeout(() => {
         finishGame(game);
+    }, 5000);
     }
 }
 

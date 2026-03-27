@@ -1,10 +1,10 @@
 import { WebSocket } from 'ws';
 import { WSMessage, Question, Game, Player } from '../types.js';
-import { players, getPlayer, addPlayerToGame, updatePlayerScore, setPlayerAnswer } from '../storage/players.js';
+import { players, getPlayer } from '../storage/players.js';
 import { games } from '../storage/games.js';
 import { GAME_STATUSES, OUTGOING_MESSAGES } from '../utils/consts.js';
 import { broadcastToGame, sendToPlayer } from '../utils/broadcast.js';
-import { finalizeQuestion, sendQuestion } from './question-handler.js';
+import { finalizeQuestion, sendNextQuestion } from './question-handler.js';
 import { generateRoomCode } from '../utils/code-generator.js';
 import { startTimer, stopTimer } from './timer-handler.js';
 import { calculatePoints } from '../utils/score-calculator.js';
@@ -85,18 +85,21 @@ export function handleJoinGame(ws: WebSocket, message: WSMessage): void {
     console.log(`[JoinGame] Game found: ${targetGame.id}`);
     console.log(`[JoinGame] Current players in game:`, targetGame.players.map(p => ({ name: p.name, index: p.index })));
     
-    const alreadyInGame = targetGame.players.some(p => p.index === player!.index);
-    console.log(`[JoinGame] Already in game? ${alreadyInGame}`);
-    
-    if (alreadyInGame) {
-        console.log(`[JoinGame] Player already in game, sending error`);
-        sendErrorResponse(ws, 'Already in game');
-        return;
+    // 👇 СНАЧАЛА УДАЛЯЕМ, ЕСЛИ ЕСТЬ (даже если alreadyInGame)
+    const existingIndex = targetGame.players.findIndex(p => p.index === player!.index);
+    if (existingIndex !== -1) {
+        console.log(`[JoinGame] Player already in game.players, removing old copy`);
+        targetGame.players.splice(existingIndex, 1);
     }
     
+    // 👇 ПОТОМ ДОБАВЛЯЕМ ССЫЛКУ
     targetGame.players.push(player);
     console.log(`[JoinGame] Added player, new total: ${targetGame.players.length}`);
-    console.log(`[JoinGame] Players now:`, targetGame.players.map(p => ({ name: p.name, index: p.index })));
+    console.log(`[JoinGame] Players now:`, targetGame.players.map(p => ({ 
+        name: p.name, 
+        index: p.index,
+        hasAnswered: p.hasAnswered 
+    })));
 
     sendToPlayer(ws, {
         type: OUTGOING_MESSAGES.GAME_JOINED,
@@ -156,7 +159,7 @@ export function handleStartGame(ws: WebSocket, message: WSMessage): void {
         }
     }
     
-    sendQuestion(game);
+    sendNextQuestion(game);
     startTimer(game, () => finalizeQuestion(game));
 }
 
@@ -164,25 +167,12 @@ export function handleAnswer(ws: WebSocket, message: WSMessage): void {
     console.log(`[Answer] ========== HANDLE ANSWER START ==========`);
     console.log(`[Answer] Received message:`, JSON.stringify(message, null, 2));
 
-console.log(`[Answer] Same player in game.players:`, game.players.find(p => p.index === player.index)?.hasAnswered);
+    const data = message.data as { gameId?: string; questionIndex: number; answerIndex: number };
+    const { questionIndex, answerIndex } = data;
     
-    const data = message.data as { gameId: string; questionIndex: number; answerIndex: number };
-    const { gameId, questionIndex, answerIndex } = data;
+    console.log(`[Answer] Parsed data: questionIndex=${questionIndex}, answerIndex=${answerIndex}`);
     
-    console.log(`[Answer] Parsed data: gameId=${gameId}, questionIndex=${questionIndex}, answerIndex=${answerIndex}`);
-    
-    const game = games.get(gameId);
-    if (!game) {
-        console.log(`[Answer] ❌ Game not found: ${gameId}`);
-        return;
-    }
-    console.log(`[Answer] ✅ Game found: ${game.id}, status=${game.status}, currentQuestion=${game.currentQuestion}`);
-    
-    if (game.status !== GAME_STATUSES.IN_PROGRESS) {
-        console.log(`[Answer] ❌ Game not in progress, status=${game.status}`);
-        return;
-    }
-    
+    // 1. Находим игрока по WebSocket
     let player: Player | undefined;
     for (const p of players.values()) {
         if (p.ws === ws) {
@@ -192,110 +182,104 @@ console.log(`[Answer] Same player in game.players:`, game.players.find(p => p.in
     }
     
     if (!player) {
-        console.log(`[Answer] ❌ Player not found for this WebSocket`);
+        console.log(`[Answer] ❌ Player not found`);
         return;
     }
-    console.log(`[Answer] ✅ Player found: ${player.name} (${player.index})`);
-
-
-    console.log(`[Answer] Player object from players Map:`, {
-        name: player.name,
-        hasAnswered: player.hasAnswered,
-        objectId: player.index
-    });
     
-    console.log(`[Answer] Same player in game.players:`, game.players.find(p => p.index === player.index)?.hasAnswered);
-
-
+    console.log(`[Answer] ✅ Player found: ${player.name} (${player.index})`);
+    
+    // 2. Находим игру, в которой участвует игрок
+    let game: Game | undefined;
+    for (const g of games.values()) {
+        if (g.status === GAME_STATUSES.IN_PROGRESS && g.players.some(p => p.index === player.index)) {
+            game = g;
+            break;
+        }
+    }
+    
+    if (!game) {
+        console.log(`[Answer] ❌ Game not found for player ${player.name}`);
+        return;
+    }
+    
+    console.log(`[Answer] ✅ Game found: ${game.id}, currentQuestion=${game.currentQuestion}`);
+    
+    // 3. Проверяем, что вопрос актуальный
     if (questionIndex !== game.currentQuestion) {
         console.log(`[Answer] ❌ Wrong question index: got ${questionIndex}, expected ${game.currentQuestion}`);
         return;
     }
-    console.log(`[Answer] ✅ Question index matches`);
     
+    // 4. Проверяем, не отвечал ли уже
     if (player.hasAnswered) {
         console.log(`[Answer] ❌ Player already answered this question`);
         return;
     }
-    console.log(`[Answer] ✅ Player hasn't answered yet`);
     
+    // 5. Получаем текущий вопрос
     const currentQuestion = game.questions[game.currentQuestion];
     if (!currentQuestion) {
         console.log(`[Answer] ❌ Current question not found`);
         return;
     }
-    console.log(`[Answer] Current question: "${currentQuestion.text}", correctIndex=${currentQuestion.correctIndex}`);
     
+    // 6. Проверяем ответ
     const isCorrect = answerIndex === currentQuestion.correctIndex;
     const answerTime = Date.now();
     const questionStartTime = game.questionStartTime || answerTime;
     const timeSpent = answerTime - questionStartTime;
     
     console.log(`[Answer] Answer is ${isCorrect ? '✓ CORRECT' : '✗ WRONG'}`);
-    console.log(`[Answer] Answer time: ${answerTime}, question start: ${questionStartTime}, time spent: ${timeSpent}ms`);
+    console.log(`[Answer] Time spent: ${timeSpent}ms`);
     
     let pointsEarned = 0;
     
     if (isCorrect) {
         pointsEarned = calculatePoints(timeSpent, currentQuestion.timeLimitSec);
         console.log(`[Answer] Points earned: ${pointsEarned}`);
-    } else {
-        console.log(`[Answer] Points earned: 0 (wrong answer)`);
     }
     
-    const gamePlayer = game.players.find(p => p.index === player.index);
-    if (gamePlayer) {
-        gamePlayer.score += pointsEarned;
-        gamePlayer.hasAnswered = true;
-        gamePlayer.answerTime = answerTime;
-        gamePlayer.answeredCorrectly = isCorrect;
-        console.log(`[Answer] Updated gamePlayer: new score=${gamePlayer.score}, hasAnswered=${gamePlayer.hasAnswered}`);
-    } else {
-        console.log(`[Answer] ⚠️ Game player not found in game.players`);
-    }
-    
-    player.score += pointsEarned;
+    // 7. Обновляем игрока
     player.hasAnswered = true;
     player.answerTime = answerTime;
     player.answeredCorrectly = isCorrect;
-    console.log(`[Answer] Updated player in Map: new score=${player.score}, hasAnswered=${player.hasAnswered}`);
-
+    player.score += pointsEarned;
+    
+    // 8. Обновляем в game.players
+    const gamePlayer = game.players.find(p => p.index === player.index);
+    if (gamePlayer) {
+        gamePlayer.hasAnswered = true;
+        gamePlayer.answerTime = answerTime;
+        gamePlayer.answeredCorrectly = isCorrect;
+        gamePlayer.score += pointsEarned;
+    }
+    
+    // 9. Сохраняем ответ
     game.playerAnswers.set(player.index, {
         answerIndex: answerIndex,
         timestamp: answerTime
     });
-    console.log(`[Answer] Saved answer in game.playerAnswers, total answers: ${game.playerAnswers.size}`);
     
+    // 10. Отправляем подтверждение
     sendToPlayer(ws, {
         type: OUTGOING_MESSAGES.ANSWER_ACCEPTED,
         data: { questionIndex },
         id: 0
     });
-    console.log(`[Answer] Sent answer_accepted to player`);
     
-    console.log(`[Answer] Current answers: ${game.playerAnswers.size}/${game.players.length}`);
-    console.log(`[Answer] Player hasAnswered statuses:`);
-    for (const p of game.players) {
-        console.log(`  - ${p.name}: hasAnswered=${p.hasAnswered}`);
-    }
-    
+    // 11. Проверяем, все ли ответили
     const allAnswered = game.players.every(p => p.hasAnswered === true);
     console.log(`[Answer] allAnswered = ${allAnswered}`);
     
     if (allAnswered) {
-        console.log(`[Answer] 🎯🎯🎯 ALL PLAYERS ANSWERED! Finalizing question... 🎯🎯🎯`);
+        console.log(`[Answer] 🎯 ALL PLAYERS ANSWERED! Finalizing...`);
         
         if (game.questionTimer) {
-            console.log(`[Answer] Stopping timer`);
             clearTimeout(game.questionTimer);
             game.questionTimer = undefined;
-        } else {
-            console.log(`[Answer] No active timer found`);
         }
         
         finalizeQuestion(game);
-    } else {
-        console.log(`[Answer] Waiting for more answers...`);
     }
     
     console.log(`[Answer] ========== HANDLE ANSWER END ==========`);
