@@ -1,7 +1,13 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { User, Game, RegData } from './types';
-import { generateUserId } from './utils/generators';
-import { sendMessage, parseMessage } from './utils/message';
+import type { User, Game, RegData, CreateGameData, JoinGameData, Player } from './types';
+import { generateUserId, generateGameId, generateGameCode } from './utils/generators';
+import { sendMessage, parseMessage, broadcastToGame } from './utils/message';
+import {
+  validateUserLoggedIn,
+  validateCreateGameData,
+  validateGameCode,
+  isPlayerInGame,
+} from './utils/validation';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -47,6 +53,104 @@ const handleRegistration = (ws: WebSocket, data: any): void => {
   console.log(`User registered: ${name}`);
 };
 
+const handleCreateGame = (ws: WebSocket, data: any): void => {
+  const userValidation = validateUserLoggedIn(wsToUserId, users, ws);
+  if (!userValidation.valid) {
+    sendMessage(ws, 'error', { message: userValidation.error });
+    return;
+  }
+
+  const dataValidation = validateCreateGameData(data);
+  if (!dataValidation.valid) {
+    sendMessage(ws, 'error', { message: dataValidation.error });
+    return;
+  }
+
+  const user = userValidation.user!;
+  const gameData = dataValidation.gameData!;
+
+  const gameId = generateGameId();
+  const code = generateGameCode();
+
+  const hostPlayer: Player = {
+    name: user.name,
+    index: user.index,
+    score: 0,
+    ws: user.ws,
+  };
+
+  const game: Game = {
+    id: gameId,
+    code,
+    hostId: user.index,
+    questions: gameData.questions,
+    players: [hostPlayer],
+    currentQuestion: 0,
+    status: 'waiting',
+    playerAnswers: new Map(),
+  };
+
+  games.set(gameId, game);
+  gameCodes.set(code, gameId);
+
+  sendMessage(ws, 'game_created', { gameId, code });
+  sendMessage(ws, 'update_players', game.players);
+
+  console.log(`Game created: ${code} by ${user.name}`);
+};
+
+const handleJoinGame = (ws: WebSocket, data: any): void => {
+  const userValidation = validateUserLoggedIn(wsToUserId, users, ws);
+  if (!userValidation.valid) {
+    sendMessage(ws, 'error', { message: userValidation.error });
+    return;
+  }
+
+  const { code } = data as JoinGameData;
+  if (!code) {
+    sendMessage(ws, 'error', { message: 'Room code required' });
+    return;
+  }
+
+  const gameValidation = validateGameCode(gameCodes, games, code);
+  if (!gameValidation.valid) {
+    sendMessage(ws, 'error', { message: gameValidation.error });
+    return;
+  }
+
+  const user = userValidation.user!;
+  const game = gameValidation.game!;
+
+  if (game.status !== 'waiting') {
+    sendMessage(ws, 'error', { message: 'Cannot join game in progress' });
+    return;
+  }
+
+  const existingGame = isPlayerInGame(games, user.index);
+  if (existingGame) {
+    sendMessage(ws, 'error', { message: 'Already in a game' });
+    return;
+  }
+
+  const newPlayer: Player = {
+    name: user.name,
+    index: user.index,
+    score: 0,
+    ws: user.ws,
+  };
+
+  game.players.push(newPlayer);
+
+  sendMessage(ws, 'game_joined', { gameId: game.id });
+  broadcastToGame(game, 'player_joined', {
+    playerName: user.name,
+    playerCount: game.players.length,
+  });
+  broadcastToGame(game, 'update_players', game.players);
+
+  console.log(`Player ${user.name} joined game ${code}`);
+};
+
 const handleMessage = (ws: WebSocket, rawMessage: string): void => {
   const message = parseMessage(rawMessage);
 
@@ -59,6 +163,12 @@ const handleMessage = (ws: WebSocket, rawMessage: string): void => {
     switch (message.type) {
       case 'reg':
         handleRegistration(ws, message.data);
+        break;
+      case 'create_game':
+        handleCreateGame(ws, message.data);
+        break;
+      case 'join_game':
+        handleJoinGame(ws, message.data);
         break;
       default:
         sendMessage(ws, 'error', { message: 'Unknown message type' });
