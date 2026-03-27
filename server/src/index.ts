@@ -1,15 +1,13 @@
-
 import { WebSocketServer } from 'ws';
-//import { handleConnection } from './server/connection-handler';
-
+import { setupWebSocketServer } from './server';
+import { setupRestApi } from './rest';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
 const wss = new WebSocketServer({ port: PORT });
 
-wss.on('listening', () => {
-    console.log(`[Server] Listening on port ${PORT}`);
-});
+setupWebSocketServer(wss);
+setupRestApi().catch((err) => console.error('[REST Error]', err));
 
 console.log(`
 ╔══════════════════════════════════════════════════════════╗
@@ -18,13 +16,9 @@ console.log(`
 ║  Server started at: ${new Date().toISOString()}             ║
 ║  Address: ws://localhost:${PORT}                            ║ 
 ║  Port: ${PORT}                                              ║
+║  REST: http://localhost:${process.env.FASTIFY_PORT || 3000}                 ║
 ╚══════════════════════════════════════════════════════════╝
 `);
-
-wss.on('connection', (ws) => {
-    console.log(`[Connection] New client connected. Total connections: ${wss.clients.size}`);
-    //handleConnection(ws);
-});
 
 wss.on('error', (error) => {
     console.error('[Server Error]', error);
