@@ -1,6 +1,8 @@
 import { WebSocketServer, WebSocket } from 'ws';
-
+import { randomUUID } from 'node:crypto';
 import {
+  WSMessage,
+  RegData,
   Game,
   Question,
   User,
@@ -213,3 +215,62 @@ const handleDisconnect = (playerIndex: string): void => {
     }
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// Connection Handler
+// ═══════════════════════════════════════════════════════════════════
+wss.on('connection', (ws: WebSocket) => {
+  console.log('New client connected');
+ 
+  let currentUser: User | null = null;
+ 
+  ws.on('message', (raw: Buffer) => {
+    let msg: WSMessage;
+ 
+    try {
+      msg = JSON.parse(raw.toString()) as WSMessage;
+    } catch {
+      sendError(ws, 'Invalid JSON message');
+      return;
+    }
+ 
+    const { type, data } = msg;
+ 
+    // ── reg ────────────────────────────────────────────────────────
+    if (type === 'reg') {
+      const { name, password } = data as RegData;
+ 
+      if (!name || name.trim() === '') {
+        send(ws, 'reg', { name: '', index: '', error: true, errorText: 'Name is required' });
+        return;
+      }
+      if (!password || password.trim() === '') {
+        send(ws, 'reg', { name, index: '', error: true, errorText: 'Password is required' });
+        return;
+      }
+ 
+      const trimmedName = name.trim();
+ 
+      if (users.has(trimmedName)) {
+        // Login — validate password
+        const existing = users.get(trimmedName)!;
+        if (existing.password !== password) {
+          send(ws, 'reg', { name: trimmedName, index: '', error: true, errorText: 'Wrong password' });
+          return;
+        }
+        // Update ws connection on re-login
+        existing.ws = ws;
+        currentUser = existing;
+        console.log(`Logged in: ${trimmedName}`);
+        send(ws, 'reg', { name: trimmedName, index: existing.index, error: false, errorText: '' });
+      } else {
+        // Register new user — index is a uuid string (matches User interface)
+        const index   = randomUUID();
+        const newUser : User = { name: trimmedName, password, index, ws };
+        users.set(trimmedName, newUser);
+        currentUser = newUser;
+        console.log(`Registered: ${trimmedName} (index: ${index})`);
+        send(ws, 'reg', { name: trimmedName, index, error: false, errorText: '' });
+      }
+      return;
+    }
