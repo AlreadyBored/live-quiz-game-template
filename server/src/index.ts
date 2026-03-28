@@ -1,12 +1,13 @@
 import { WebSocketServer, WebSocket } from 'ws';
+
 import {
   Game,
   Question,
   User,
 } from './types.js';
-
+ 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-
+ 
 // WebSocket server
 const wss = new WebSocketServer({ port: PORT });
  
@@ -14,9 +15,9 @@ console.log(`WebSocket server is running on ws://localhost:${PORT}`);
  
 // In-memory stores 
 const users   = new Map<string, User>();   // name → User
-const games   = new Map<string, Game>();   // gameId → Game 
-
-
+const games   = new Map<string, Game>();   // gameId → Game
+const codes   = new Map<string, string>(); // code → gameId
+ 
 // Send JSON message to one WebSocket
 const send = (ws: WebSocket, type: string, data: unknown): void => {
   if (ws.readyState === WebSocket.OPEN) {
@@ -34,7 +35,7 @@ const broadcast = (game: Game, type: string, data: unknown): void => {
   for (const player of game.players) {
     if (player.ws) send(player.ws, type, data);
   }
-// Also notify host if not already a player
+  // Also notify host if not already a player
   const hostIsPlayer = game.players.some(p => p.index === game.hostId);
   if (!hostIsPlayer) {
     const host = [...users.values()].find(u => u.index === game.hostId);
@@ -49,7 +50,7 @@ const generateCode = (): string =>
 // Get player list for update_players — name, index, score only
 const getPlayerList = (game: Game) =>
   game.players.map(p => ({ name: p.name, index: p.index, score: p.score }));
-
+ 
 // Validate questions array
 const validateQuestions = (questions: unknown): string | null => {
   if (!Array.isArray(questions) || questions.length === 0) {
@@ -71,4 +72,15 @@ const validateQuestions = (questions: unknown): string | null => {
     }
   }
   return null;
+};
+ 
+// Calculate speed-based points — max 1000 (instant), min 100 (at time limit)
+const calcPoints = (
+  timeLimitSec    : number,
+  answeredAt      : number,
+  questionStartTime: number
+): number => {
+  const elapsed   = (answeredAt - questionStartTime) / 1000;
+  const timeRatio = Math.max(0, 1 - elapsed / timeLimitSec);
+  return Math.round(100 + 900 * timeRatio);
 };
