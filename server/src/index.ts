@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import {
   WSMessage,
   RegData,
+  CreateGameData,
+  JoinGameData,
+  StartGameData,
+  AnswerData,
   Game,
+  Player,
   Question,
   User,
 } from './types.js';
@@ -19,6 +24,10 @@ console.log(`WebSocket server is running on ws://localhost:${PORT}`);
 const users   = new Map<string, User>();   // name → User
 const games   = new Map<string, Game>();   // gameId → Game
 const codes   = new Map<string, string>(); // code → gameId
+
+// ═══════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════
  
 // Send JSON message to one WebSocket
 const send = (ws: WebSocket, type: string, data: unknown): void => {
@@ -274,7 +283,7 @@ wss.on('connection', (ws: WebSocket) => {
       }
       return;
     }
-// ── create_game ────────────────────────────────────────────────
+// ── create_game ────────────
     if (type === 'create_game') {
       if (!currentUser) { sendError(ws, 'Register first'); return; }
  
@@ -305,7 +314,7 @@ wss.on('connection', (ws: WebSocket) => {
       return;
     }
  
-    // ── join_game ──────────────────────────────────────────────────
+    // ── join_game ────────────
     if (type === 'join_game') {
       if (!currentUser) { sendError(ws, 'Register first'); return; }
  
@@ -347,4 +356,78 @@ wss.on('connection', (ws: WebSocket) => {
  
       broadcast(game, 'update_players', getPlayerList(game));
       return;
-    }    
+    }
+// ── start_game ──────────────
+    if (type === 'start_game') {
+      if (!currentUser) { sendError(ws, 'Register first'); return; }
+ 
+      const { gameId } = data as StartGameData;
+      const game = games.get(gameId);
+ 
+      if (!game)                                  { sendError(ws, 'Game not found'); return; }
+      if (game.hostId !== currentUser.index)      { sendError(ws, 'Only host can start'); return; }
+      if (game.status !== 'waiting')              { sendError(ws, 'Game already started'); return; }
+      if (game.players.length === 0)              { sendError(ws, 'No players joined yet'); return; }
+ 
+      game.status          = 'in_progress';
+      game.currentQuestion = 0;
+      console.log(`Game started: ${gameId}`);
+ 
+      sendQuestion(game);
+      return;
+    }
+ 
+    // ── answer ─────────
+    if (type === 'answer') {
+      if (!currentUser) { sendError(ws, 'Register first'); return; }
+ 
+      const { gameId, questionIndex, answerIndex } = data as AnswerData;
+      const game = games.get(gameId);
+ 
+      if (!game)                         { sendError(ws, 'Game not found'); return; }
+      if (game.status !== 'in_progress') { sendError(ws, 'Game not active'); return; }
+      if (questionIndex !== game.currentQuestion) {
+        sendError(ws, 'Wrong question index'); return;
+      }
+ 
+      const player = game.players.find(p => p.index === currentUser!.index);
+      if (!player)  { sendError(ws, 'You are not in this game'); return; }
+ 
+      if (game.playerAnswers.has(currentUser.index)) {
+        sendError(ws, 'Already answered this question'); return;
+      }
+ 
+      // Record answer with timestamp
+      game.playerAnswers.set(currentUser.index, {
+        answerIndex,
+        timestamp: Date.now(),
+      });
+ 
+      // Update player flags from Player interface
+      player.hasAnswered       = true;
+      player.answerTime        = Date.now();
+      player.answeredCorrectly = answerIndex === game.questions[game.currentQuestion].correctIndex;
+ 
+      // Personal confirmation
+      send(ws, 'answer_accepted', { questionIndex });
+      console.log(`${currentUser.name} answered Q${questionIndex + 1}`);
+ 
+      // End question early if all players answered
+      if (game.playerAnswers.size === game.players.length) {
+        endQuestion(game);
+      }
+      return;
+    }
+ 
+    // ── unknown command ──────
+    sendError(ws, `Unknown command: ${type}`);
+  });
+ 
+  ws.on('close', () => {
+    if (currentUser) handleDisconnect(currentUser.index);
+  });
+ 
+  ws.on('error', (err: Error) => {
+    console.error(`WebSocket error: ${err.message}`);
+  });
+});        
