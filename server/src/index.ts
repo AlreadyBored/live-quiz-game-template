@@ -16,7 +16,7 @@ console.log(`WebSocket server is running on ws://localhost:${PORT}`);
 // In-memory stores 
 const users   = new Map<string, User>();   // name → User
 const games   = new Map<string, Game>();   // gameId → Game
-
+const codes   = new Map<string, string>(); // code → gameId
  
 // Send JSON message to one WebSocket
 const send = (ws: WebSocket, type: string, data: unknown): void => {
@@ -83,4 +83,133 @@ const calcPoints = (
   const elapsed   = (answeredAt - questionStartTime) / 1000;
   const timeRatio = Math.max(0, 1 - elapsed / timeLimitSec);
   return Math.round(100 + 900 * timeRatio);
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// Game Logic
+// ═══════════════════════════════════════════════════════════════════
+ 
+// Send current question to everyone — without correctIndex
+const sendQuestion = (game: Game): void => {
+  const q = game.questions[game.currentQuestion];
+  if (!q) return;
+ 
+  // Reset per-question state
+  game.playerAnswers     = new Map();
+  game.questionStartTime = Date.now();
+ 
+  // Reset player answer flags
+  for (const player of game.players) {
+    player.hasAnswered       = false;
+    player.answeredCorrectly = false;
+    player.answerTime        = undefined;
+  }
+ 
+  if (game.questionTimer) clearTimeout(game.questionTimer);
+ 
+  // Broadcast question WITHOUT correctIndex
+  broadcast(game, 'question', {
+    questionNumber: game.currentQuestion + 1,
+    totalQuestions: game.questions.length,
+    text          : q.text,
+    options       : q.options,
+    timeLimitSec  : q.timeLimitSec,
+  });
+ 
+  // Server-side timer — auto-end when time expires
+  game.questionTimer = setTimeout(() => {
+    endQuestion(game);
+  }, q.timeLimitSec * 1000);
+};
+ 
+// End current question — broadcast correct answer + scores
+const endQuestion = (game: Game): void => {
+  if (!games.has(game.id)) return;
+ 
+  if (game.questionTimer) {
+    clearTimeout(game.questionTimer);
+    game.questionTimer = undefined;
+  }
+ 
+  const q             = game.questions[game.currentQuestion];
+  const playerResults = game.players.map(player => {
+    const answer = game.playerAnswers.get(player.index);
+ 
+    if (!answer) {
+      return {
+        name        : player.name,
+        answered    : false,
+        correct     : false,
+        pointsEarned: 0,
+        totalScore  : player.score,
+      };
+    }
+ 
+    const isCorrect    = answer.answerIndex === q.correctIndex;
+    const pointsEarned = isCorrect
+      ? calcPoints(q.timeLimitSec, answer.timestamp, game.questionStartTime!)
+      : 0;
+ 
+    if (isCorrect) player.score += pointsEarned;
+ 
+    return {
+      name        : player.name,
+      answered    : true,
+      correct     : isCorrect,
+      pointsEarned,
+      totalScore  : player.score,
+    };
+  });
+ 
+  // Broadcast question_result with correctIndex revealed
+  broadcast(game, 'question_result', {
+    questionIndex: game.currentQuestion,
+    correctIndex : q.correctIndex,
+    playerResults,
+  });
+ 
+  game.currentQuestion++;
+ 
+  if (game.currentQuestion < game.questions.length) {
+    // Send next question after short delay
+    setTimeout(() => sendQuestion(game), 3000);
+  } else {
+    finishGame(game);
+  }
+};
+ 
+// Finish game — broadcast final scoreboard with ranks
+const finishGame = (game: Game): void => {
+  game.status = 'finished';
+ 
+  const scoreboard = [...game.players]
+    .sort((a, b) => b.score - a.score)
+    .map((p, idx) => ({ name: p.name, score: p.score, rank: idx + 1 }));
+ 
+  broadcast(game, 'game_finished', { scoreboard });
+ 
+  // Cleanup
+  games.delete(game.id);
+  codes.delete(game.code);
+};
+ 
+// Handle player disconnect — remove from game, notify others
+const handleDisconnect = (playerIndex: string): void => {
+  console.log(`Disconnected: ${playerIndex}`);
+ 
+  for (const [, game] of games) {
+    const idx = game.players.findIndex(p => p.index === playerIndex);
+    if (idx !== -1) {
+      game.players.splice(idx, 1);
+      broadcast(game, 'update_players', getPlayerList(game));
+ 
+      // Cleanup if no players and game still waiting
+      if (game.players.length === 0 && game.status === 'waiting') {
+        if (game.questionTimer) clearTimeout(game.questionTimer);
+        games.delete(game.id);
+        codes.delete(game.code);
+      }
+      break;
+    }
+  }
 };
