@@ -274,3 +274,77 @@ wss.on('connection', (ws: WebSocket) => {
       }
       return;
     }
+// ── create_game ────────────────────────────────────────────────
+    if (type === 'create_game') {
+      if (!currentUser) { sendError(ws, 'Register first'); return; }
+ 
+      const { questions } = data as CreateGameData;
+      const err = validateQuestions(questions);
+      if (err) { sendError(ws, err); return; }
+ 
+      const gameId = randomUUID();
+      let   code   = generateCode();
+      while (codes.has(code)) code = generateCode();
+ 
+      const newGame: Game = {
+        id              : gameId,
+        code,
+        hostId          : currentUser.index,
+        questions       : questions as Question[],
+        players         : [],
+        currentQuestion : 0,
+        status          : 'waiting',
+        playerAnswers   : new Map(),
+      };
+ 
+      games.set(gameId, newGame);
+      codes.set(code, gameId);
+      console.log(`Game created: ${gameId} | Code: ${code} | Host: ${currentUser.name}`);
+ 
+      send(ws, 'game_created', { gameId, code });
+      return;
+    }
+ 
+    // ── join_game ──────────────────────────────────────────────────
+    if (type === 'join_game') {
+      if (!currentUser) { sendError(ws, 'Register first'); return; }
+ 
+      const { code } = data as JoinGameData;
+      if (!code) { sendError(ws, 'Room code is required'); return; }
+ 
+      const gameId = codes.get(code.toUpperCase().trim());
+      if (!gameId) { sendError(ws, `No game found with code: ${code}`); return; }
+ 
+      const game = games.get(gameId);
+      if (!game)                         { sendError(ws, 'Game not found'); return; }
+      if (game.status !== 'waiting')     { sendError(ws, 'Game already started'); return; }
+      if (game.players.some(p => p.index === currentUser!.index)) {
+        sendError(ws, 'Already in this game'); return;
+      }
+ 
+      // Add player using Player interface fields
+      const newPlayer: Player = {
+        name          : currentUser.name,
+        index         : currentUser.index,
+        score         : 0,
+        ws,
+        hasAnswered   : false,
+        answerTime    : undefined,
+        answeredCorrectly: false,
+      };
+ 
+      game.players.push(newPlayer);
+      console.log(`${currentUser.name} joined: ${gameId}`);
+ 
+      // Personal response to joining player
+      send(ws, 'game_joined', { gameId });
+ 
+      // Broadcast to all in game
+      broadcast(game, 'player_joined', {
+        playerName : currentUser.name,
+        playerCount: game.players.length,
+      });
+ 
+      broadcast(game, 'update_players', getPlayerList(game));
+      return;
+    }    
