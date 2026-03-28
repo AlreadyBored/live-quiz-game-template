@@ -3,6 +3,7 @@ import { WebSocketServer } from 'ws';
 import { createContext } from './state.js';
 import type { WSMessage } from './types.js';
 import { sendError } from './utils.js';
+import { handleReg } from './handlers/reg.js';
 
 dotenv.config();
 
@@ -21,11 +22,12 @@ export function createServer(port = DEFAULT_PORT): WebSocketServer {
         sendError(ws, 'Invalid JSON');
         return;
       }
-
       const { type, data } = message;
 
       switch (type) {
-        // TODO: Implement message handlers
+        case 'reg':
+          handleReg(context, ws, data);
+          break;
         default:
           sendError(ws, `Unknown command: ${type}`);
       }
