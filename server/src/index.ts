@@ -16,7 +16,7 @@ console.log(`WebSocket server is running on ws://localhost:${PORT}`);
 // In-memory stores 
 const users   = new Map<string, User>();   // name → User
 const games   = new Map<string, Game>();   // gameId → Game
-const codes   = new Map<string, string>(); // code → gameId
+
  
 // Send JSON message to one WebSocket
 const send = (ws: WebSocket, type: string, data: unknown): void => {
@@ -65,7 +65,7 @@ const validateQuestions = (questions: unknown): string | null => {
       return `Question ${i + 1}: options must have exactly 4 items`;
     }
     if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex > 3) {
-      return `Question ${i + 1}: correctIndex must be 0–3`;
+      return `Question ${i + 1}: correctIndex must be 0-3`;
     }
     if (typeof q.timeLimitSec !== 'number' || q.timeLimitSec <= 0) {
       return `Question ${i + 1}: timeLimitSec must be a positive number`;
