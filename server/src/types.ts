@@ -27,6 +27,7 @@ export interface Game {
   status: 'waiting' | 'in_progress' | 'finished';
   questionStartTime?: number;
   questionTimer?: NodeJS.Timeout;
+  transitionTimer?: NodeJS.Timeout;
   playerAnswers: Map<string, { answerIndex: number; timestamp: number }>;
 }
 
@@ -64,4 +65,13 @@ export interface AnswerData {
   gameId: string;
   questionIndex: number;
   answerIndex: number;
+}
+
+export interface ServerContext {
+  usersByName: Map<string, User>;
+  usersById: Map<string, User>;
+  gamesById: Map<string, Game>;
+  gamesByCode: Map<string, Game>;
+  wsToUserId: Map<WebSocket, string>;
+  userIdToGameId: Map<string, string>;
 }
