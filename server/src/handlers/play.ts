@@ -43,6 +43,70 @@ export function startQuestion(context: ServerContext, game: Game): void {
   }, timeLimitMs);
 }
 
+export function handlePlayerDisconnect(context: ServerContext, userId: string): void {
+  const gameId = context.userIdToGameId.get(userId);
+  if (!gameId) {
+    return;
+  }
+
+  const game = context.gamesById.get(gameId);
+  if (!game) {
+    context.userIdToGameId.delete(userId);
+    return;
+  }
+
+  game.playerAnswers.delete(userId);
+  context.userIdToGameId.delete(userId);
+
+  const wasHost = userId === game.hostId;
+  game.players = game.players.filter((p) => p.index !== userId);
+
+  if (game.players.length === 0) {
+    cleanupGameTimers(game);
+    context.gamesById.delete(game.id);
+    context.gamesByCode.delete(game.code);
+    return;
+  }
+
+  if (wasHost && game.status === 'waiting') {
+    cleanupGameTimers(game);
+    for (const p of game.players) {
+      sendMessage(p.ws, 'error', { message: 'Host disconnected' });
+      context.userIdToGameId.delete(p.index);
+    }
+    context.gamesById.delete(game.id);
+    context.gamesByCode.delete(game.code);
+    return;
+  }
+
+  if (wasHost && game.status === 'in_progress') {
+    game.status = 'finished';
+    cleanupGameTimers(game);
+    const sorted = [...getPlayablePlayers(game)].sort((a, b) => b.score - a.score);
+    const scoreboard = sorted.map((p, i) => ({
+      name: p.name,
+      score: p.score,
+      rank: i + 1,
+    }));
+    broadcastToGame(game, 'game_finished', { scoreboard });
+    for (const p of game.players) {
+      context.userIdToGameId.delete(p.index);
+    }
+    context.gamesById.delete(game.id);
+    context.gamesByCode.delete(game.code);
+    return;
+  }
+
+  broadcastToGame(game, 'update_players', toPublicPlayers(game.players));
+
+  if (game.status === 'in_progress') {
+    const playable = getPlayablePlayers(game);
+    if (playable.length > 0 && game.playerAnswers.size >= playable.length) {
+      resolveQuestion(context, game.id);
+    }
+  }
+}
+
 export function handleAnswer(context: ServerContext, ws: WebSocket, data: AnswerData): void {
   const userId = context.wsToUserId.get(ws);
   if (!userId) {

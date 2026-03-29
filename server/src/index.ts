@@ -5,7 +5,7 @@ import type { WSMessage } from './types.js';
 import { sendError } from './utils.js';
 import { handleReg } from './handlers/reg.js';
 import { handleCreateGame, handleJoinGame, handleStartGame } from './handlers/game.js';
-import { handleAnswer } from './handlers/play.js';
+import { handleAnswer, handlePlayerDisconnect } from './handlers/play.js';
 
 dotenv.config();
 
@@ -49,6 +49,9 @@ export function createServer(port = DEFAULT_PORT): WebSocketServer {
 
     ws.on('close', () => {
       const userId = context.wsToUserId.get(ws);
+      if (userId) {
+        handlePlayerDisconnect(context, userId);
+      }
       context.wsToUserId.delete(ws);
 
       if (userId) {
