@@ -113,13 +113,13 @@ export class Game implements GameInterface {
 
   setCurrentQuestionTimers(timeLimitSec: number) {
     this.clearQuestionTimer()
-    this.questionTimer = setTimeout(
-      () => {
-        this.broadcastQuestionResults()
-        this.broadcastNextQuestion()
-      },
-      timeLimitSec * 1000
-    )
+    this.questionTimer = setTimeout(() => {
+      const broadcastDelay =
+        this.currentQuestion + 1 === this.questions.length ? 0 : 3000
+
+      this.broadcastQuestionResults()
+      this.broadcastNextQuestion(broadcastDelay)
+    }, timeLimitSec * 1000)
     this.questionStartTime = Date.now()
   }
 
@@ -144,28 +144,30 @@ export class Game implements GameInterface {
     })
   }
 
-  broadcastNextQuestion() {
-    const question = this.getCurrentQuestion()
+  async broadcastNextQuestion(delay: number = 0) {
+    setTimeout(() => {
+      const question = this.getCurrentQuestion()
 
-    if (question === false) {
-      this.finishGame()
-      return
-    }
+      if (question === false) {
+        this.finishGame()
+        return
+      }
 
-    this.setPlayersAnswerData()
-    this.setCurrentQuestionTimers(question.timeLimitSec)
+      this.setPlayersAnswerData()
+      this.setCurrentQuestionTimers(question.timeLimitSec)
 
-    this.broadcastToPlayers({
-      type: "question",
-      data: {
-        questionNumber: this.currentQuestion + 1,
-        totalQuestions: this.questions.length,
-        text: question.text,
-        options: question.options,
-        timeLimitSec: question.timeLimitSec,
-      },
-      id: 0,
-    })
+      this.broadcastToPlayers({
+        type: "question",
+        data: {
+          questionNumber: this.currentQuestion + 1,
+          totalQuestions: this.questions.length,
+          text: question.text,
+          options: question.options,
+          timeLimitSec: question.timeLimitSec,
+        },
+        id: 0,
+      })
+    }, delay)
   }
 
   startGame() {
