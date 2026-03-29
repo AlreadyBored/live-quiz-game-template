@@ -179,13 +179,18 @@ export function resolveQuestion(context: ServerContext, gameId: string): void {
     return;
   }
 
+  if (game.questionStartTime === undefined) {
+    return;
+  }
+  const questionStart = game.questionStartTime;
+  game.questionStartTime = undefined;
+
   if (game.questionTimer) {
     clearTimeout(game.questionTimer);
     game.questionTimer = undefined;
   }
 
   const question = game.questions[game.currentQuestion];
-  const questionStart = game.questionStartTime ?? Date.now();
   if (!question) {
     return;
   }
@@ -233,6 +238,11 @@ export function resolveQuestion(context: ServerContext, gameId: string): void {
         rank: i + 1,
       }));
       broadcastToGame(g, 'game_finished', { scoreboard });
+      for (const p of g.players) {
+        context.userIdToGameId.delete(p.index);
+      }
+      context.gamesById.delete(g.id);
+      context.gamesByCode.delete(g.code);
       return;
     }
 
