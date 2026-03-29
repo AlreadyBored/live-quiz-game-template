@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { CreateGameData, Game, Player, ServerContext } from '../types.js';
+import type { CreateGameData, Game, JoinGameData, Player, ServerContext } from '../types.js';
 import {
   broadcastToGame,
   generateId,
@@ -70,5 +70,72 @@ export function handleCreateGame(context: ServerContext, ws: WebSocket, data: Cr
     code: game.code,
   });
 
+  broadcastToGame(game, 'update_players', toPublicPlayers(game.players));
+}
+
+/**
+ * Присоединение игрока к комнате по коду (только status === 'waiting').
+ * Новому игроку — лично game_joined; всем в комнате — player_joined и update_players.
+ */
+export function handleJoinGame(context: ServerContext, ws: WebSocket, data: JoinGameData): void {
+  const userId = getUserIdForSocket(context, ws);
+  if (!userId) {
+    sendError(ws, 'You must register first');
+    return;
+  }
+
+  const user = context.usersById.get(userId);
+  if (!user) {
+    sendError(ws, 'User not found');
+    return;
+  }
+
+  const rawCode = typeof data?.code === 'string' ? data.code.trim() : '';
+  const code = rawCode.toUpperCase();
+  if (code.length !== 6) {
+    sendError(ws, 'Invalid room code');
+    return;
+  }
+
+  const game = context.gamesByCode.get(code);
+  if (!game) {
+    sendError(ws, 'Game not found');
+    return;
+  }
+
+  if (game.status !== 'waiting') {
+    sendError(ws, 'Game already started');
+    return;
+  }
+
+  const boundGameId = context.userIdToGameId.get(userId);
+  if (boundGameId && boundGameId !== game.id) {
+    sendError(ws, 'You are already in another game');
+    return;
+  }
+
+  const existingPlayer = game.players.find((p) => p.index === userId);
+  if (existingPlayer) {
+    existingPlayer.ws = ws;
+    context.userIdToGameId.set(userId, game.id);
+    sendMessage(ws, 'game_joined', { gameId: game.id });
+    broadcastToGame(game, 'update_players', toPublicPlayers(game.players));
+    return;
+  }
+
+  const player: Player = {
+    name: user.name,
+    index: user.index,
+    score: 0,
+    ws,
+  };
+  game.players.push(player);
+  context.userIdToGameId.set(userId, game.id);
+
+  sendMessage(ws, 'game_joined', { gameId: game.id });
+  broadcastToGame(game, 'player_joined', {
+    playerName: user.name,
+    playerCount: game.players.length,
+  });
   broadcastToGame(game, 'update_players', toPublicPlayers(game.players));
 }

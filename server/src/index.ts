@@ -4,7 +4,7 @@ import { createContext } from './state.js';
 import type { WSMessage } from './types.js';
 import { sendError } from './utils.js';
 import { handleReg } from './handlers/reg.js';
-import { handleCreateGame } from './handlers/game.js';
+import { handleCreateGame, handleJoinGame } from './handlers/game.js';
 
 dotenv.config();
 
@@ -31,6 +31,9 @@ export function createServer(port = DEFAULT_PORT): WebSocketServer {
           break;
         case 'create_game':
           handleCreateGame(context, ws, data);
+          break;
+        case 'join_game':
+          handleJoinGame(context, ws, data);
           break;
         default:
           sendError(ws, `Unknown command: ${type}`);
