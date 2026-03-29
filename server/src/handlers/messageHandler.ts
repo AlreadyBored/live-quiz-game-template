@@ -41,7 +41,7 @@ export function handleMessage(ws: any, message: string) {
     );
 
   }
-  if(type === 'game_created') {
+  if(type === 'create_game') {
     const playerId = socketToPlayer.get(ws);
      if (!playerId) return;
     const { questions } = data;
@@ -59,7 +59,7 @@ export function handleMessage(ws: any, message: string) {
     status: 'waiting',
   };
  games.set(gameId, game);
-
+console.log('creating game...');
    ws.send(
     JSON.stringify({
       type: 'game_created',
@@ -71,7 +71,7 @@ export function handleMessage(ws: any, message: string) {
     })
   );
   }
-  if (type === 'join_game') {
+if (type === 'join_game') {
   const playerId = socketToPlayer.get(ws);
   if (!playerId) return;
 
@@ -81,41 +81,33 @@ export function handleMessage(ws: any, message: string) {
 
   const player = players.get(playerId);
   if (!player) return;
+
   game.players.push(player);
 
   ws.send(
     JSON.stringify({
       type: 'game_joined',
-      data: {
-        gameId: game.id,
-      },
+      data: { gameId: game.id },
       id: 0,
     })
   );
+  const allSockets = [...socketToPlayer.keys()];
 
-  game.players.forEach((p: { name: string; index: string; score: number }) => {
-    const playerSocket = [...socketToPlayer.entries()]
-      .find(([_, id]) => id === p.index)?.[0];
-
-    playerSocket?.send(
+  allSockets.forEach(socket => {
+    socket.send(
+      JSON.stringify({
+        type: 'update_players',
+        data: game.players,
+        id: 0,
+      })
+    );
+    socket.send(
       JSON.stringify({
         type: 'player_joined',
         data: {
           playerName: player.name,
           playerCount: game.players.length,
         },
-        id: 0,
-      })
-    );
-  });
-  game.players.forEach((p: { name: string; index: string; score: number }) => {
-    const playerSocket = [...socketToPlayer.entries()]
-      .find(([_, id]) => id === p.index)?.[0];
-
-    playerSocket?.send(
-      JSON.stringify({
-        type: 'update_players',
-        data: game.players,
         id: 0,
       })
     );
@@ -138,24 +130,73 @@ if (type === 'start_game') {
 
   const question = game.questions[0];
 
+  const allSockets = [
+  ...game.players.map((p: { name: string; index: string; score: number })  => [...socketToPlayer.entries()].find(([_, id]) => id === p.index)?.[0]).filter(Boolean),
+  [...socketToPlayer.entries()].find(([_, id]) => id === game.hostId)?.[0]
+].filter(Boolean);
+
+allSockets.forEach(socket => {
+  socket.send(
+    JSON.stringify({
+      type: 'question',
+      data: {
+        questionNumber: 1,
+        totalQuestions: game.questions.length,
+        text: question.text,
+        options: question.options,
+        timeLimitSec: question.timeLimitSec,
+      },
+      id: 0,
+    })
+  );
+});
+  game.answers = new Map();
+game.questionStartTime = Date.now();
+
+game.timer = setTimeout(() => {
+  const correctIndex = question.correctIndex;
+
+  const results = game.players.map((p: { name: string; index: string; score: number }) => {
+    const answer = game.answers.get(p.index);
+
+    const isCorrect = answer && answer.answerIndex === correctIndex;
+
+    let points = 0;
+
+    if (isCorrect) {
+      const timeSpent = (Date.now() - game.questionStartTime) / 1000;
+      const timeLeft = question.timeLimitSec - timeSpent;
+
+      points = Math.max(0, Math.floor(1000 * (timeLeft / question.timeLimitSec)));
+      p.score += points;
+    }
+
+    return {
+      name: p.name,
+      answered: !!answer,
+      correct: !!isCorrect,
+      pointsEarned: points,
+      totalScore: p.score,
+    };
+  });
+
   game.players.forEach((p: { name: string; index: string; score: number }) => {
     const playerSocket = [...socketToPlayer.entries()]
       .find(([_, id]) => id === p.index)?.[0];
 
     playerSocket?.send(
       JSON.stringify({
-        type: 'question',
+        type: 'question_result',
         data: {
-          questionNumber: 1,
-          totalQuestions: game.questions.length,
-          text: question.text,
-          options: question.options,
-          timeLimitSec: question.timeLimitSec,
+          questionIndex: game.currentQuestion,
+          correctIndex,
+          playerResults: results,
         },
         id: 0,
       })
     );
   });
+}, question.timeLimitSec * 1000);
 }
 
 if (type === 'answer') {
@@ -185,20 +226,5 @@ if (type === 'answer') {
     })
   );
 }
-    if(type === 'game_created') {
-    
-  }
-    if(type === 'answer_accepted') {
-    
-  }
-    if(type === 'question_result') {
-    
-  }
-    if(type === 'game_finished') {
-    
-  }
-    if(type === 'error') {
-    
-  }
 
 }
