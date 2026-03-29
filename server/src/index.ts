@@ -1,7 +1,6 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { AnswerData, CreateGameData, Game, JoinGameData, Player, RegData, StartGameData, User, WSMessage } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { error } from 'node:console';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -19,8 +18,8 @@ wss.on('connection', (ws: WebSocket) => {
         try{
             const message: WSMessage = JSON.parse(msg.toString());
             handleMessage(ws, message);
-        } catch (error) {
-            console.error('Invalid message', error);
+        } catch {
+            sendError(ws, 'Invalid JSON');
         }
     });
 
@@ -28,30 +27,42 @@ wss.on('connection', (ws: WebSocket) => {
         if (currentUserId) handleDisconnect(currentUserId);
     });
 
-    function handleMessage(ws: WebSocket, msg: WSMessage) {
+    function handleMessage(ws: WebSocket, msg: any) {
         const {type, data} = msg;
+
+        if (type !== 'reg' && !currentUserId) {
+        return sendError(ws, 'Not authenticated');
+    }
 
         switch (type) {
             case 'reg': 
                currentUserId = handleReg(ws, data as RegData);
                break;
-            case 'create game':
+            case 'create_game':
                 handleCreateGame(ws, data as CreateGameData, currentUserId!);
                 break;
-            case 'join game': 
+            case 'join_game': 
                 handleJoinGame(ws, data as JoinGameData, currentUserId!);
                 break;
-            case 'start game':
+            case 'start_game':
                 handleStartGame(currentUserId!, (data as StartGameData).gameId);
                 break;
             case 'answer' :
                 handleAnswer(currentUserId!, data as AnswerData);
                 break;
             default:
-                console.warn('Unknown message type:', type);    
+                sendError(ws, 'Unknown message type');   
         }
     }
 });
+
+function sendError(ws: WebSocket, message: string) {
+    ws.send(JSON.stringify({
+        type: 'error',
+        data: { message },
+        id: 0
+    }));
+}
 
 function handleReg(ws: WebSocket, data: RegData): string {
     const userId = uuidv4();
@@ -82,6 +93,14 @@ function handleReg(ws: WebSocket, data: RegData): string {
 }
 
 function handleCreateGame(ws: WebSocket, data: CreateGameData, hostId: string) {
+        if (!data.questions?.length) return sendError(ws, 'Invalid questions');
+
+    for (const q of data.questions) {
+        if (!q.text || q.options.length !== 4 || q.correctIndex > 3 || q.correctIndex < 0) {
+            return sendError(ws, 'Invalid question format');
+        }
+    }
+    
     const gameId = uuidv4();
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -96,6 +115,8 @@ function handleCreateGame(ws: WebSocket, data: CreateGameData, hostId: string) {
     playerAnswers: new Map()
   };
 
+    game.players.push(players[hostId]);
+
     games[gameId] = game;
 
     ws.send(JSON.stringify({
@@ -108,8 +129,11 @@ function handleCreateGame(ws: WebSocket, data: CreateGameData, hostId: string) {
 function handleJoinGame(ws: WebSocket, data: JoinGameData, playerId: string) {
     const game = Object.values(games).find(g => g.code === data.code);
     if(!game) {
-        return;
+        return sendError(ws, 'Game not found');
     }
+
+    if (game.players.some(p => p.index === playerId)) return;
+
    const player = players[playerId];
    game.players.push(player);
 
@@ -125,7 +149,7 @@ function handleJoinGame(ws: WebSocket, data: JoinGameData, playerId: string) {
 
 function handleStartGame(hostId: string, gameId: string) {
     const game = games[gameId];
-  if (!game || game.hostId !== hostId){
+  if (!game || game.hostId !== hostId || game.players.length === 0){
     return;
   };
   game.status = 'in_progress';
@@ -134,19 +158,27 @@ function handleStartGame(hostId: string, gameId: string) {
 
 function handleAnswer(playerId: string, data: AnswerData) {
     const game = games[data.gameId];
-    if (!game) {
+    if (!game || data.questionIndex !== game.currentQuestion) {
         return;
     }
 
+    if (data.answerIndex < 0 || data.answerIndex > 3) {
+        return;
+     }
+
     const player = game.players.find(p => p.index === playerId);
-    if (!player || player.hasAnswered) return;
+    if (!player || player.hasAnswered) {
+        return;
+    }
 
     const now = Date.now();
     player.hasAnswered = true;
     player.answerTime = (now - (game.questionStartTime ?? now)) / 1000;
 
-    game.playerAnswers.set(playerId, {answerIndex: data.answerIndex, timestamp: now});
-
+    game.playerAnswers.set(playerId, {
+        answerIndex: data.answerIndex,
+        timestamp: Date.now()
+    });
     player.ws?.send(JSON.stringify({
         type: 'answer_accepted',
         data: { questionIndex: data.questionIndex },
@@ -198,19 +230,21 @@ function endQuestion(game: Game) {
     const basePoints = 1000;
 
     const results = game.players.map(p => {
-    const answered = p.hasAnswered ?? false;
     const answerObj = game.playerAnswers.get(p.index);
     const correct = answerObj?.answerIndex === q.correctIndex;
 
-    let points = 0;
-    if(answered && correct) {
-        const timeUsed = p.answerTime ?? q.timeLimitSec;
-        points = Math.floor(basePoints * ((q.timeLimitSec - timeUsed) / q.timeLimitSec));
-        p.score += points;
-    } 
+
+        let points = 0;
+        if (correct) {
+            const timeUsed = p.answerTime ?? q.timeLimitSec;
+            const timeFactor = Math.max(0, (q.timeLimitSec - timeUsed) / q.timeLimitSec);
+            points = Math.floor(basePoints * timeFactor);
+            p.score += points;
+        }
+
       return {
         name: p.name,
-        answered,
+        answered: p.hasAnswered,
         correct,
         pointsEarned: points,
         totalScore: p.score
@@ -245,10 +279,33 @@ function updatePlayers(game: Game) {
 function handleDisconnect(playerId: string) {
     Object.values(games).forEach(game => {
         const idx = game.players.findIndex(p => p.index === playerId);
-    if (idx >= 0) {
-      game.players.splice(idx, 1);
-      updatePlayers(game);
-    }
+        if (idx >= 0) {
+            const disconnectedPlayer = game.players[idx];
+
+            if (game.status === 'in_progress' && !disconnectedPlayer.hasAnswered) {
+                disconnectedPlayer.hasAnswered = true;
+                game.playerAnswers.set(playerId, {
+                    answerIndex: -1,
+                    timestamp: Date.now()
+                });
+            }
+
+            game.players.splice(idx, 1);
+
+            updatePlayers(game);
+
+            if (game.status === 'in_progress') {
+                if (game.players.every(p => p.hasAnswered)) {
+                    clearTimeout(game.questionTimer);
+                    endQuestion(game);
+                }
+            }
+
+            if (game.players.length === 0) {
+                delete games[game.id];
+            }
+        }
     });
+
     delete players[playerId];
 }
