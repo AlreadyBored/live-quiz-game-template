@@ -204,27 +204,129 @@ if (type === 'answer') {
   if (!playerId) return;
 
   const { gameId, questionIndex, answerIndex } = data;
-
   const game = games.get(gameId);
   if (!game) return;
 
-  if (!game.answers) {
-    game.answers = new Map();
-  }
+  if (!game.answers) game.answers = new Map();
 
-  game.answers.set(playerId, {
-    answerIndex,
-  });
+  game.answers.set(playerId, { answerIndex });
 
   ws.send(
     JSON.stringify({
       type: 'answer_accepted',
-      data: {
-        questionIndex,
-      },
+      data: { questionIndex },
       id: 0,
     })
   );
+
+  if (game.answers.size === game.players.length) {
+    clearTimeout(game.timer);
+    processQuestionResults(game);
+  }
 }
 
+}
+
+function processQuestionResults(game: any) {
+  const question = game.questions[game.currentQuestion];
+  const correctIndex = question.correctIndex;
+
+  const results = game.players.map((p: any) => {
+    const answer = game.answers.get(p.index);
+    const isCorrect = answer && answer.answerIndex === correctIndex;
+
+    let points = 0;
+    if (isCorrect) {
+      const timeSpent = (Date.now() - game.questionStartTime) / 1000;
+      const timeLeft = Math.max(0, question.timeLimitSec - timeSpent);
+      points = Math.floor(1000 * (timeLeft / question.timeLimitSec));
+      p.score += points;
+    }
+
+    return {
+      name: p.name,
+      answered: !!answer,
+      correct: !!isCorrect,
+      pointsEarned: points,
+      totalScore: p.score,
+    };
+  });
+
+  const allSockets = [
+    ...game.players.map( (p: { name: string; index: string; score: number })=> [...socketToPlayer.entries()].find(([_, id]) => id === p.index)?.[0]).filter(Boolean),
+    [...socketToPlayer.entries()].find(([_, id]) => id === game.hostId)?.[0]
+  ].filter(Boolean);
+
+  allSockets.forEach(socket => {
+    socket.send(
+      JSON.stringify({
+        type: 'question_result',
+        data: {
+          questionIndex: game.currentQuestion,
+          correctIndex,
+          playerResults: results,
+        },
+        id: 0,
+      })
+    );
+  });
+
+  if (game.currentQuestion + 1 < game.questions.length) {
+    game.currentQuestion += 1;
+    game.answers = new Map();
+    game.questionStartTime = Date.now();
+    sendQuestionToAll(game);
+
+    game.timer = setTimeout(() => processQuestionResults(game), question.timeLimitSec * 1000);
+  } else {
+    finishGame(game);
+  }
+}
+
+function sendQuestionToAll(game: any) {
+  const question = game.questions[game.currentQuestion];
+  const allSockets = [
+    ...game.players.map( (p: { name: string; index: string; score: number }) => [...socketToPlayer.entries()].find(([_, id]) => id === p.index)?.[0]).filter(Boolean),
+    [...socketToPlayer.entries()].find(([_, id]) => id === game.hostId)?.[0]
+  ].filter(Boolean);
+
+  allSockets.forEach(socket => {
+    socket.send(
+      JSON.stringify({
+        type: 'question',
+        data: {
+          questionNumber: game.currentQuestion + 1,
+          totalQuestions: game.questions.length,
+          text: question.text,
+          options: question.options,
+          timeLimitSec: question.timeLimitSec,
+        },
+        id: 0,
+      })
+    );
+  });
+}
+
+function finishGame(game: any) {
+  const scoreboard = [...game.players]
+    .sort((a, b) => b.score - a.score)
+    .map((p, i) => ({ name: p.name, score: p.score, rank: i + 1 }));
+
+  const allSockets = [
+    ...game.players.map( (p: { name: string; index: string; score: number }) => [...socketToPlayer.entries()].find(([_, id]) => id === p.index)?.[0]).filter(Boolean),
+    [...socketToPlayer.entries()].find(([_, id]) => id === game.hostId)?.[0]
+  ].filter(Boolean);
+
+  allSockets.forEach(socket => {
+    socket.send(
+      JSON.stringify({
+        type: 'game_finished',
+        data: { scoreboard },
+        id: 0,
+      })
+    );
+  });
+
+  game.status = 'finished';
+  clearTimeout(game.timer);
 }
