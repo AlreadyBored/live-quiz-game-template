@@ -15,5 +15,6 @@ if (address && typeof address === "object") {
 wss.on("connection", (ws) => {
   ws.on("error", console.error);
 
-  ws.on("message", (data) => messageHandler(ws, data))
+
+  ws.on("message", (data) => messageHandler(ws, data, wss))
 });

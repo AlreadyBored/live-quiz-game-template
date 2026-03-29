@@ -1,13 +1,21 @@
 import { RawData } from "ws";
 import { isMessage } from "./isMessage";
-import { CreateGameData, Game, Player, RegData, WSMessage } from "../types";
+import {
+  CreateGameData,
+  Game,
+  JoinGameData,
+  Player,
+  RegData,
+  WSMessage,
+} from "../types";
 import { randomUUID } from "node:crypto";
 import { games, players } from "../db/db";
-import type { WebSocket } from "ws";
+import { Server, WebSocket } from "ws";
 import { generateCode } from "./generateCode";
 
-export function messageHandler(ws: WebSocket, data: RawData) {
+export function messageHandler(ws: WebSocket, data: RawData, wss: Server) {
   const message = JSON.parse(data.toString());
+  console.log(data.toString());
   if (!isMessage(message)) return;
 
   const response: WSMessage = {
@@ -45,18 +53,19 @@ export function messageHandler(ws: WebSocket, data: RawData) {
     case "create_game": {
       const data = message.data as CreateGameData;
       const host = players.get(ws);
-      if (!host) return;
+      if (!host || !host.ws) return;
       const game: Game = {
         id: randomUUID(),
         code: generateCode(),
         hostId: host.index,
+        hostWs: host.ws,
         questions: data.questions,
         players: [],
         currentQuestion: 0,
         status: "waiting",
         playerAnswers: new Map(),
       };
-      games.set(game.id, game);
+      games.set(game.code, game);
 
       response.type = "game_created";
       response.data = {
@@ -64,6 +73,50 @@ export function messageHandler(ws: WebSocket, data: RawData) {
         code: game.code,
       };
       break;
+    }
+    case "join_game": {
+      const data = message.data as JoinGameData;
+      const game = games.get(data.code);
+      const player = players.get(ws);
+      if (!game || !player) return;
+
+      if (!game.players.includes(player)) {
+        game.players.push(player);
+      }
+
+      response.type = "game_joined";
+      response.data = {
+        gameId: game.id,
+      };
+
+      ws.send(JSON.stringify(response));
+
+      const joinResponse: WSMessage = {
+        type: "player_joined",
+        data: {
+          playerName: player.name,
+          playerCount: game.players.length,
+        },
+        id: 0,
+      };
+
+      const updateResponse: WSMessage = {
+        type: "update_players",
+        data: game.players.map((p) => ({
+          name: p.name,
+          index: p.index,
+          score: p.score,
+        })),
+        id: 0,
+      };
+
+      game.hostWs.send(JSON.stringify(updateResponse));
+      game.players.forEach((p) => {
+        if (!p.ws) return;
+        p.ws.send(JSON.stringify(joinResponse));
+        p.ws.send(JSON.stringify(updateResponse));
+      });
+      return;
     }
     default:
       break;
