@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { WebSocketServer } from 'ws';
-import type { WSMessage, RegData, CreateGameData } from './types.js';
+import type { WSMessage, RegData, CreateGameData, JoinGameData } from './types.js';
 import { handleReg } from './handlers/reg.js';
 import { handleCreateGame } from './handlers/createGame.js';
+import { handleJoinGame } from './handlers/joinGame.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -25,6 +26,9 @@ wss.on('connection', (ws) => {
         break;
       case 'create_game':
         handleCreateGame(ws, msg.data as CreateGameData);
+        break;
+      case 'join_game':
+        handleJoinGame(ws, msg.data as JoinGameData);
         break;
     }
   });
