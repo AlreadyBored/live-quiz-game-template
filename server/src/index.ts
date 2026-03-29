@@ -144,15 +144,26 @@ wss.on("connection", (ws, request) => {
     }
 
     if (req.type === "answer") {
-      ws.send(
-        JSON.stringify({
-          type: "answer_accepted",
-          data: {
-            questionIndex: 1,
-          },
-          id: 0,
-        }),
-      );
+      const { gameId, questionIndex, answerIndex } = req.data;
+      const game = games.find((g) => g.id === gameId);
+      const user = users.find((u) => u.ws === ws);
+
+      if (game && user) {
+        game.playerAnswers.set(user.index, {
+          answerIndex,
+          timestamp: Date.now(),
+        });
+
+        ws.send(
+          JSON.stringify({
+            type: "answer_accepted",
+            data: {
+              questionIndex,
+            },
+            id: 0,
+          }),
+        );
+      }
     }
 
     if (req.type === "start_game") {
