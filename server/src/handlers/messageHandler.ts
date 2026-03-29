@@ -71,15 +71,120 @@ export function handleMessage(ws: any, message: string) {
     })
   );
   }
-    if(type === 'game_joined') {
-    
+  if (type === 'join_game') {
+  const playerId = socketToPlayer.get(ws);
+  if (!playerId) return;
+
+  const { code } = data;
+  const game = Array.from(games.values()).find(g => g.code === code);
+  if (!game) return;
+
+  const player = players.get(playerId);
+  if (!player) return;
+  game.players.push(player);
+
+  ws.send(
+    JSON.stringify({
+      type: 'game_joined',
+      data: {
+        gameId: game.id,
+      },
+      id: 0,
+    })
+  );
+
+  game.players.forEach((p: { name: string; index: string; score: number }) => {
+    const playerSocket = [...socketToPlayer.entries()]
+      .find(([_, id]) => id === p.index)?.[0];
+
+    playerSocket?.send(
+      JSON.stringify({
+        type: 'player_joined',
+        data: {
+          playerName: player.name,
+          playerCount: game.players.length,
+        },
+        id: 0,
+      })
+    );
+  });
+  game.players.forEach((p: { name: string; index: string; score: number }) => {
+    const playerSocket = [...socketToPlayer.entries()]
+      .find(([_, id]) => id === p.index)?.[0];
+
+    playerSocket?.send(
+      JSON.stringify({
+        type: 'update_players',
+        data: game.players,
+        id: 0,
+      })
+    );
+  });
+}
+
+if (type === 'start_game') {
+  const playerId = socketToPlayer.get(ws);
+  if (!playerId) return;
+
+  const { gameId } = data;
+
+  const game = games.get(gameId);
+  if (!game) return;
+
+  if (game.hostId !== playerId) return;
+
+  game.status = 'in_progress';
+  game.currentQuestion = 0;
+
+  const question = game.questions[0];
+
+  game.players.forEach((p: { name: string; index: string; score: number }) => {
+    const playerSocket = [...socketToPlayer.entries()]
+      .find(([_, id]) => id === p.index)?.[0];
+
+    playerSocket?.send(
+      JSON.stringify({
+        type: 'question',
+        data: {
+          questionNumber: 1,
+          totalQuestions: game.questions.length,
+          text: question.text,
+          options: question.options,
+          timeLimitSec: question.timeLimitSec,
+        },
+        id: 0,
+      })
+    );
+  });
+}
+
+if (type === 'answer') {
+  const playerId = socketToPlayer.get(ws);
+  if (!playerId) return;
+
+  const { gameId, questionIndex, answerIndex } = data;
+
+  const game = games.get(gameId);
+  if (!game) return;
+
+  if (!game.answers) {
+    game.answers = new Map();
   }
-    if(type === 'player_joined') {
-    
-  }
-    if(type === 'update_players') {
-    
-  }
+
+  game.answers.set(playerId, {
+    answerIndex,
+  });
+
+  ws.send(
+    JSON.stringify({
+      type: 'answer_accepted',
+      data: {
+        questionIndex,
+      },
+      id: 0,
+    })
+  );
+}
     if(type === 'game_created') {
     
   }
