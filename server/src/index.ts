@@ -1,5 +1,5 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { CreateGameData, Game, JoinGameData, Player, RegData, StartGameData, User, WSMessage } from './types';
+import { AnswerData, CreateGameData, Game, JoinGameData, Player, RegData, StartGameData, User, WSMessage } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { error } from 'node:console';
 
@@ -25,7 +25,7 @@ wss.on('connection', (ws: WebSocket) => {
     });
 
     ws.on('close', () => {
-        console.error('Invalid message', error);
+        if (currentUserId) handleDisconnect(currentUserId);
     });
 
     function handleMessage(ws: WebSocket, msg: WSMessage) {
@@ -44,7 +44,11 @@ wss.on('connection', (ws: WebSocket) => {
             case 'start game':
                 handleStartGame(currentUserId!, (data as StartGameData).gameId);
                 break;
-
+            case 'answer' :
+                handleAnswer(currentUserId!, data as AnswerData);
+                break;
+            default:
+                console.warn('Unknown message type:', type);    
         }
     }
 });
@@ -128,6 +132,33 @@ function handleStartGame(hostId: string, gameId: string) {
   startQuestion(game);
 }
 
+function handleAnswer(playerId: string, data: AnswerData) {
+    const game = games[data.gameId];
+    if (!game) {
+        return;
+    }
+
+    const player = game.players.find(p => p.index === playerId);
+    if (!player || player.hasAnswered) return;
+
+    const now = Date.now();
+    player.hasAnswered = true;
+    player.answerTime = (now - (game.questionStartTime ?? now)) / 1000;
+
+    game.playerAnswers.set(playerId, {answerIndex: data.answerIndex, timestamp: now});
+
+    player.ws?.send(JSON.stringify({
+        type: 'answer_accepted',
+        data: { questionIndex: data.questionIndex },
+        id: 0
+    }));
+
+    if (game.players.every(p => p.hasAnswered)) {
+        clearTimeout(game.questionTimer);
+        endQuestion(game);
+    }
+}
+
 function startQuestion(game: Game) {
     game.currentQuestion +=1;
     if (game.currentQuestion >= game.questions.length) {
@@ -162,14 +193,6 @@ function finishGame(game: Game) {
         broadcastToGame(game, {type: 'game_finished', data: { scoreboard }, id: 0 });
 }
 
-function broadcastToGame(game: Game, msg: any) {
-    game.players.forEach(p => {
-        if (p.ws?.readyState === WebSocket.OPEN) {
-          p.ws.send(JSON.stringify(msg));
-    }
-    });
-}
-
 function endQuestion(game: Game) {
     const q = game.questions[game.currentQuestion];
     const basePoints = 1000;
@@ -191,10 +214,25 @@ function endQuestion(game: Game) {
         correct,
         pointsEarned: points,
         totalScore: p.score
-      };
+      };  
     });
-
+      
+    broadcastToGame(game, {
+        type: 'question_result',
+        data: { questionIndex: game.currentQuestion, correctIndex: q.correctIndex, playerResults: results },
+        id: 0
+    });
+  setTimeout(() => startQuestion(game), 2000);
 }
+
+function broadcastToGame(game: Game, msg: any) {
+    game.players.forEach(p => {
+        if (p.ws?.readyState === WebSocket.OPEN) {
+          p.ws.send(JSON.stringify(msg));
+    }
+    });
+}
+
 
 function updatePlayers(game: Game) {
     broadcastToGame(game, {
@@ -202,4 +240,15 @@ function updatePlayers(game: Game) {
         data: game.players.map(p => ({ name: p.name, index: p.index, score: p.score })),
         id: 0
     });
+}
+
+function handleDisconnect(playerId: string) {
+    Object.values(games).forEach(game => {
+        const idx = game.players.findIndex(p => p.index === playerId);
+    if (idx >= 0) {
+      game.players.splice(idx, 1);
+      updatePlayers(game);
+    }
+    });
+    delete players[playerId];
 }
