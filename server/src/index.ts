@@ -18,6 +18,11 @@ function broadcastToGame(gameId: string, type: string, data: any) {
       player.ws.send(message);
     }
   });
+
+  const hostUser = users.find((u) => u.index === game.hostId);
+  if (hostUser?.ws?.readyState === 1) {
+    hostUser.ws.send(message);
+  }
 }
 
 // WebSocket server
@@ -148,6 +153,110 @@ wss.on("connection", (ws, request) => {
           id: 0,
         }),
       );
+    }
+
+    if (req.type === "start_game") {
+      const { gameId } = req.data;
+      const game = games.find((g) => g.id === gameId);
+      const user = users.find((u) => u.ws === ws);
+
+      if (game && user && game.hostId === user.index) {
+        game.status = "in_progress";
+        game.currentQuestion = 0;
+        game.questionStartTime = Date.now();
+
+        const question = game.questions[0];
+        broadcastToGame(gameId, "question", {
+          questionNumber: 1,
+          totalQuestions: game.questions.length,
+          text: question.text,
+          options: question.options,
+          timeLimitSec: question.timeLimitSec,
+        });
+
+        const timeLimitMs = question.timeLimitSec * 1000;
+        game.questionTimer = setTimeout(() => {
+          const answerTime = Date.now();
+          const timeUsed = (answerTime - game.questionStartTime!) / 1000;
+          const timeRemaining = Math.max(0, question.timeLimitSec - timeUsed);
+
+          const playerResults = game.players.map((player) => {
+            const answer = game.playerAnswers.get(player.index);
+            const correct =
+              answer && answer.answerIndex === question.correctIndex;
+            let pointsEarned = 0;
+
+            if (answer) {
+              const answerTimestamp = answer.timestamp;
+              const timeTaken =
+                (answerTimestamp - game.questionStartTime!) / 1000;
+              const remainingTime = Math.max(
+                0,
+                question.timeLimitSec - timeTaken,
+              );
+
+              if (correct) {
+                pointsEarned = Math.round(
+                  1000 * (remainingTime / question.timeLimitSec),
+                );
+              }
+
+              player.score += pointsEarned;
+            }
+
+            return {
+              name: player.name,
+              answered: !!answer,
+              correct: !!correct,
+              pointsEarned,
+              totalScore: player.score,
+            };
+          });
+
+          broadcastToGame(gameId, "question_result", {
+            questionIndex: game.currentQuestion,
+            correctIndex: question.correctIndex,
+            playerResults,
+          });
+
+          game.playerAnswers.clear();
+
+          if (game.currentQuestion! < game.questions.length - 1) {
+            setTimeout(() => {
+              game.currentQuestion!++;
+              game.questionStartTime = Date.now();
+
+              const nextQuestion = game.questions[game.currentQuestion!];
+              broadcastToGame(gameId, "question", {
+                questionNumber: game.currentQuestion! + 1,
+                totalQuestions: game.questions.length,
+                text: nextQuestion.text,
+                options: nextQuestion.options,
+                timeLimitSec: nextQuestion.timeLimitSec,
+              });
+
+              const nextTimeLimitMs = nextQuestion.timeLimitSec * 1000;
+              game.questionTimer = setTimeout(() => {
+                // Timer for next question
+              }, nextTimeLimitMs);
+            }, 3000);
+          } else {
+            setTimeout(() => {
+              const sortedPlayers = [...game.players].sort(
+                (a, b) => b.score - a.score,
+              );
+              const scoreboard = sortedPlayers.map((p, idx) => ({
+                name: p.name,
+                score: p.score,
+                rank: idx + 1,
+              }));
+
+              broadcastToGame(gameId, "game_finished", { scoreboard });
+              game.status = "finished";
+            }, 3000);
+          }
+        }, timeLimitMs);
+      }
     }
   });
 
