@@ -50,16 +50,41 @@ wss.on("connection", (ws, request) => {
     }
 
     if (req.type === "create_game") {
-      ws.send(
-        JSON.stringify({
-          type: "game_created",
-          data: {
-            gameId: "1",
-            code: "12344CSD",
-          },
-          id: 0,
-        }),
-      );
+      const { questions } = req.data;
+      const user = users.find((u) => u.ws === ws);
+
+      if (user) {
+        const gameId = String(gameIdCounter++);
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let code = "";
+        for (let i = 0; i < 6; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        const game: Game = {
+          id: gameId,
+          code,
+          hostId: user.index,
+          questions,
+          players: [],
+          currentQuestion: -1,
+          status: "waiting",
+          playerAnswers: new Map(),
+        };
+
+        games.push(game);
+
+        ws.send(
+          JSON.stringify({
+            type: "game_created",
+            data: {
+              gameId,
+              code,
+            },
+            id: 0,
+          }),
+        );
+      }
     }
 
     if (req.type === "join_game") {
