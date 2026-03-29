@@ -29,8 +29,26 @@ export function handleReg(context: ServerContext, ws: WebSocket, data: RegData):
       return;
     }
 
+    for (const [oldWs, id] of context.wsToUserId.entries()) {
+      if (id === existingUser.index && oldWs !== ws) {
+        context.wsToUserId.delete(oldWs);
+        break;
+      }
+    }
+
     existingUser.ws = ws;
     context.wsToUserId.set(ws, existingUser.index);
+
+    const gameId = context.userIdToGameId.get(existingUser.index);
+    if (gameId) {
+      const game = context.gamesById.get(gameId);
+      if (game) {
+        const player = game.players.find((p) => p.index === existingUser.index);
+        if (player) {
+          player.ws = ws;
+        }
+      }
+    }
 
     sendMessage(ws, 'reg', {
       name: existingUser.name,
