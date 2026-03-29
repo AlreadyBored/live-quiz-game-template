@@ -1,5 +1,6 @@
 import { WebSocketServer } from "ws";
 import { messageHandler } from "./utils/messageHandler";
+import { handleDisconnect } from "./utils/handleDisconnect";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -15,6 +16,7 @@ if (address && typeof address === "object") {
 wss.on("connection", (ws) => {
   ws.on("error", console.error);
 
+  ws.on("message", (data) => messageHandler(ws, data, wss));
 
-  ws.on("message", (data) => messageHandler(ws, data, wss))
+  ws.on("close", () => handleDisconnect(ws));
 });

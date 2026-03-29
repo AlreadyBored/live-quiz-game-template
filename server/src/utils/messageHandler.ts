@@ -22,7 +22,6 @@ export const BASE_POINTS = 1000;
 
 export function messageHandler(ws: WebSocket, data: RawData, wss: Server) {
   const message = JSON.parse(data.toString());
-  console.log(data.toString());
   if (!isMessage(message)) return;
 
   const response: WSMessage = {
