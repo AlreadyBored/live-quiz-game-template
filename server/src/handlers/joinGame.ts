@@ -4,7 +4,12 @@ import { send, sendError, broadcastToGame } from "../utils/index.js";
 import { userIdBySocket, usersById, gameByCode } from "../store.js";
 
 export const handleJoinGame = (ws: WebSocket, data: JoinGameData): void => {
-  const userId = userIdBySocket.get(ws)!;
+  const userId = userIdBySocket.get(ws);
+
+  if (!userId) {
+    sendError(ws, "Not authenticated");
+    return;
+  }
 
   const game = gameByCode.get(data.code);
 
