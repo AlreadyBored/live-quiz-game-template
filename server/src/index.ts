@@ -1,7 +1,12 @@
 import { WebSocketServer } from "ws";
-import { WSMessage } from "./types";
+import { WSMessage, User, Game } from "./types";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+
+const users: User[] = [];
+const games: Game[] = [];
+let userIdCounter = 1;
+let gameIdCounter = 1;
 
 // WebSocket server
 const wss = new WebSocketServer({ port: PORT });
@@ -14,12 +19,28 @@ wss.on("connection", (ws, request) => {
     console.log("Received:", req);
 
     if (req.type === "reg") {
+      const { name, password } = req.data;
+
+      let user = users.find((u) => u.name === name && u.password === password);
+
+      if (!user) {
+        user = {
+          name,
+          password,
+          index: String(userIdCounter++),
+          ws,
+        };
+        users.push(user);
+      } else {
+        user.ws = ws;
+      }
+
       ws.send(
         JSON.stringify({
           type: "reg",
           data: {
-            name: "Ksu",
-            index: 0,
+            name: user.name,
+            index: user.index,
             error: false,
             errorText: "",
           },
