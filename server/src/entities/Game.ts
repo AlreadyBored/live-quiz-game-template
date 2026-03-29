@@ -1,6 +1,8 @@
 import { Player } from "./Player"
 import { Game as GameInterface, Question } from "../types"
 
+const BROADCAST_DELAY = 3000
+
 export class Game implements GameInterface {
   id: string
   code: string
@@ -115,7 +117,7 @@ export class Game implements GameInterface {
     this.clearQuestionTimer()
     this.questionTimer = setTimeout(() => {
       const broadcastDelay =
-        this.currentQuestion + 1 === this.questions.length ? 0 : 3000
+        this.currentQuestion + 1 === this.questions.length ? 0 : BROADCAST_DELAY
 
       this.broadcastQuestionResults()
       this.broadcastNextQuestion(broadcastDelay)
@@ -196,7 +198,7 @@ export class Game implements GameInterface {
     if (this.allPlayersAnswered()) {
       this.clearQuestionTimer()
       this.broadcastQuestionResults()
-      this.broadcastNextQuestion()
+      this.broadcastNextQuestion(BROADCAST_DELAY)
     }
   }
 }
