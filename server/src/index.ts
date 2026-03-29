@@ -1,7 +1,7 @@
 import { WebSocketServer } from "ws";
 import type { WSMessage } from "./types.js";
-import { userIdBySocket, socketsByUserId } from "./store.js";
 import { dispatch } from "./handlers/index.js";
+import { disconnectUser, removePlayerFromGame } from "./handlers/disconnect.js";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -18,12 +18,16 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    const userId = userIdBySocket.get(ws);
-    if (userId) {
-      userIdBySocket.delete(ws);
-      socketsByUserId.delete(userId);
+    const userId = disconnectUser(ws);
+
+    if (!userId) {
+      console.log("unknown user disconnected");
+      return;
     }
-    console.log(`client ${userId} disconnected`);
+
+    removePlayerFromGame(userId);
+
+    console.log(`userId ${userId} disconnected`);
   });
 });
 

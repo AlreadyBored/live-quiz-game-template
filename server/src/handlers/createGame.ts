@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import type { CreateGameData, Game, Question } from "../types.js";
+import type { CreateGameData, Game } from "../types.js";
 import { send } from "../utils/index.js";
 import {
   userIdBySocket,
@@ -22,6 +22,8 @@ export const handleCreateGame = (ws: WebSocket, data: CreateGameData): void => {
     players: [],
     currentQuestion: -1,
     status: "waiting",
+    questionTimer: null,
+    questionStartTime: null,
     playerAnswers: new Map(),
   };
 
