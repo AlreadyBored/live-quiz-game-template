@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { CreateGameData, Game, JoinGameData, Player, ServerContext } from '../types.js';
+import type { CreateGameData, Game, JoinGameData, Player, ServerContext, StartGameData } from '../types.js';
 import {
   broadcastToGame,
   generateId,
@@ -9,6 +9,7 @@ import {
   sendMessage,
   toPublicPlayers,
 } from '../utils.js';
+import { startQuestion } from './play.js';
 
 function getUserIdForSocket(context: ServerContext, ws: WebSocket): string | undefined {
   return context.wsToUserId.get(ws);
@@ -73,10 +74,35 @@ export function handleCreateGame(context: ServerContext, ws: WebSocket, data: Cr
   broadcastToGame(game, 'update_players', toPublicPlayers(game.players));
 }
 
-/**
- * Присоединение игрока к комнате по коду (только status === 'waiting').
- * Новому игроку — лично game_joined; всем в комнате — player_joined и update_players.
- */
+export function handleStartGame(context: ServerContext, ws: WebSocket, data: StartGameData): void {
+  const userId = getUserIdForSocket(context, ws);
+  if (!userId) {
+    sendError(ws, 'You must register first');
+    return;
+  }
+
+  const gameId = typeof data?.gameId === 'string' ? data.gameId : '';
+  const game = gameId ? context.gamesById.get(gameId) : undefined;
+  if (!game) {
+    sendError(ws, 'Game not found');
+    return;
+  }
+
+  if (game.hostId !== userId) {
+    sendError(ws, 'Only the host can start the game');
+    return;
+  }
+
+  if (game.status !== 'waiting') {
+    sendError(ws, 'Game has already started');
+    return;
+  }
+
+  game.status = 'in_progress';
+  game.currentQuestion = 0;
+  startQuestion(context, game);
+}
+
 export function handleJoinGame(context: ServerContext, ws: WebSocket, data: JoinGameData): void {
   const userId = getUserIdForSocket(context, ws);
   if (!userId) {
