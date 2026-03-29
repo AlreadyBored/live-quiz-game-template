@@ -1,17 +1,24 @@
 import { RawData } from "ws";
 import { isMessage } from "./isMessage";
 import {
+  AnswerData,
   CreateGameData,
   Game,
   JoinGameData,
   Player,
   RegData,
+  StartGameData,
   WSMessage,
 } from "../types";
 import { randomUUID } from "node:crypto";
-import { games, players } from "../db/db";
+import { gamesByCode, gamesById, players } from "../db/db";
 import { Server, WebSocket } from "ws";
 import { generateCode } from "./generateCode";
+import { broadcast } from "./broadcast";
+import { sendNextQuestion } from "./sendNextQuestion";
+import { endQuestion } from "./endQuestion";
+
+export const BASE_POINTS = 1000;
 
 export function messageHandler(ws: WebSocket, data: RawData, wss: Server) {
   const message = JSON.parse(data.toString());
@@ -61,11 +68,12 @@ export function messageHandler(ws: WebSocket, data: RawData, wss: Server) {
         hostWs: host.ws,
         questions: data.questions,
         players: [],
-        currentQuestion: 0,
+        currentQuestion: -1,
         status: "waiting",
         playerAnswers: new Map(),
       };
-      games.set(game.code, game);
+      gamesByCode.set(game.code, game);
+      gamesById.set(game.id, game);
 
       response.type = "game_created";
       response.data = {
@@ -76,7 +84,7 @@ export function messageHandler(ws: WebSocket, data: RawData, wss: Server) {
     }
     case "join_game": {
       const data = message.data as JoinGameData;
-      const game = games.get(data.code);
+      const game = gamesByCode.get(data.code);
       const player = players.get(ws);
       if (!game || !player) return;
 
@@ -111,11 +119,53 @@ export function messageHandler(ws: WebSocket, data: RawData, wss: Server) {
       };
 
       game.hostWs.send(JSON.stringify(updateResponse));
-      game.players.forEach((p) => {
-        if (!p.ws) return;
-        p.ws.send(JSON.stringify(joinResponse));
-        p.ws.send(JSON.stringify(updateResponse));
-      });
+      broadcast(game, joinResponse, updateResponse);
+
+      return;
+    }
+    case "start_game": {
+      const data = message.data as StartGameData;
+      const game = gamesById.get(data.gameId);
+      if (!game) return;
+      sendNextQuestion(game);
+      return;
+    }
+    case "answer": {
+      const { gameId, answerIndex } = message.data as AnswerData;
+      const player = players.get(ws);
+      const game = gamesById.get(gameId);
+      if (!game || !player || !game.questionStartTime) return;
+      if (game.playerAnswers.has(player.index)) return;
+
+      const questionIndex = game.currentQuestion;
+      const question = game.questions[questionIndex];
+      if (!question) return;
+
+      const timeLimit = question.timeLimitSec * 1000;
+      const timestamp = Date.now() - game.questionStartTime;
+      const correctIndex = question.correctIndex;
+
+      game.playerAnswers.set(player.index, { answerIndex, timestamp });
+      player.hasAnswered = true;
+      player.answeredCorrectly = correctIndex === answerIndex;
+
+      if (player.answeredCorrectly && timestamp < timeLimit) {
+        player.score += Math.round(BASE_POINTS * (1 - timestamp / timeLimit));
+      }
+
+      ws.send(
+        JSON.stringify({
+          type: "answer_accepted",
+          data: { questionIndex },
+          id: 0,
+        }),
+      );
+
+      if (game.playerAnswers.size === game.players.length) {
+        clearTimeout(game.questionTimer);
+        endQuestion(game, questionIndex);
+      }
+
       return;
     }
     default:
