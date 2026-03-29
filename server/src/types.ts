@@ -37,11 +37,13 @@ export interface User {
   ws?: WebSocket;
 }
 
-export interface WSMessage {
-  type: string;
-  data: any;
-  id: number;
-}
+export type WSMessage = {
+  [K in keyof IncomingMessages]: {
+    type: K;
+    data: IncomingMessages[K];
+    id: number;
+  };
+}[keyof IncomingMessages];
 
 export interface RegData {
   name: string;
@@ -71,4 +73,90 @@ export interface AnswerData {
   gameId: string;
   questionIndex: number;
   answerIndex: number;
+}
+
+export interface IncomingMessages {
+  reg: RegData;
+  create_game: CreateGameData;
+  join_game: JoinGameData;
+  start_game: StartGameData;
+  answer: AnswerData;
+}
+
+export interface PlayerInfo {
+  name: string;
+  index: string;
+  score: number;
+}
+
+export type UpdatePlayersData = PlayerInfo[];
+
+export interface PlayerJoinedData {
+  playerName: string;
+  playerCount: number;
+}
+
+export interface QuestionData {
+  questionNumber: number;
+  totalQuestions: number;
+  text: string;
+  options: string[];
+  timeLimitSec: number;
+}
+
+export interface PlayerResult {
+  name: string;
+  answered: boolean;
+  correct: boolean;
+  pointsEarned: number;
+  totalScore: number;
+}
+
+export interface QuestionResultData {
+  questionIndex: number;
+  correctIndex: number;
+  playerResults: PlayerResult[];
+}
+
+export interface ScoreboardEntry {
+  name: string;
+  score: number;
+  rank: number;
+}
+
+export interface GameFinishedData {
+  scoreboard: ScoreboardEntry[];
+}
+
+export interface BroadcastMessages {
+  player_joined: PlayerJoinedData;
+  update_players: UpdatePlayersData;
+  question: QuestionData;
+  question_result: QuestionResultData;
+  game_finished: GameFinishedData;
+}
+
+export interface GameCreatedData {
+  gameId: string;
+  code: string;
+}
+
+export interface GameJoinedData {
+  gameId: string;
+}
+
+export interface AnswerAcceptedData {
+  questionIndex: number;
+}
+
+export interface ErrorData {
+  message: string;
+}
+
+export interface SendMessages {
+  reg: RegResponse;
+  game_created: GameCreatedData;
+  game_joined: GameJoinedData;
+  answer_accepted: AnswerAcceptedData;
+  error: ErrorData;
 }

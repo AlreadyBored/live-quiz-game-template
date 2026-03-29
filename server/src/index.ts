@@ -1,8 +1,7 @@
 import { WebSocketServer } from "ws";
 import type { WSMessage } from "./types.js";
 import { userIdBySocket, socketsByUserId } from "./store.js";
-import { handleReg } from "./handlers/reg.js";
-import { handleCreateGame } from "./handlers/createGame.js";
+import { dispatch } from "./handlers/index.js";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -15,11 +14,7 @@ wss.on("connection", (ws) => {
     const msg: WSMessage = JSON.parse(String(raw));
     console.log("received message:", msg);
 
-    if (msg.type === "reg") {
-      handleReg(ws, msg.data);
-    } else if (msg.type === "create_game") {
-      handleCreateGame(ws, msg.data);
-    }
+    dispatch(ws, msg.type, msg.data);
   });
 
   ws.on("close", () => {
