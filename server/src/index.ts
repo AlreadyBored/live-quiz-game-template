@@ -1,9 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { CreateGameData, Game, JoinGameData, Player, RegData, User, WSMessage } from './types';
+import { CreateGameData, Game, JoinGameData, Player, RegData, StartGameData, User, WSMessage } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { error } from 'node:console';
-
-
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -43,7 +41,9 @@ wss.on('connection', (ws: WebSocket) => {
             case 'join game': 
                 handleJoinGame(ws, data as JoinGameData, currentUserId!);
                 break;
-
+            case 'start game':
+                handleStartGame(currentUserId!, (data as StartGameData).gameId);
+                break;
 
         }
     }
@@ -119,12 +119,81 @@ function handleJoinGame(ws: WebSocket, data: JoinGameData, playerId: string) {
   updatePlayers(game);
 }
 
+function handleStartGame(hostId: string, gameId: string) {
+    const game = games[gameId];
+  if (!game || game.hostId !== hostId){
+    return;
+  };
+  game.status = 'in_progress';
+  startQuestion(game);
+}
+
+function startQuestion(game: Game) {
+    game.currentQuestion +=1;
+    if (game.currentQuestion >= game.questions.length) {
+        return finishGame(game);
+    }
+    const q = game.questions[game.currentQuestion];
+    game.players.forEach(p => { p.hasAnswered = false; p.answerTime = undefined; });
+    game.playerAnswers.clear();
+    game.questionStartTime = Date.now();
+
+    broadcastToGame(game, {
+        type: 'question',
+        data: {
+           questionNumber: game.currentQuestion + 1,
+           totalQuestions: game.questions.length,
+           text: q.text,
+           options: q.options,
+           timeLimitSec: q.timeLimitSec       
+          },
+        id: 0
+    });
+
+    game.questionTimer = setTimeout(() => endQuestion(game), q.timeLimitSec * 1000);
+}
+
+function finishGame(game: Game) {
+    game.status = 'finished';
+    const scoreboard = [...game.players]
+        .sort((a, b) => b.score - a.score)
+        .map((p, idx) => ({ name: p.name, score: p.score, rank: idx + 1 }));
+    
+        broadcastToGame(game, {type: 'game_finished', data: { scoreboard }, id: 0 });
+}
+
 function broadcastToGame(game: Game, msg: any) {
     game.players.forEach(p => {
         if (p.ws?.readyState === WebSocket.OPEN) {
           p.ws.send(JSON.stringify(msg));
     }
     });
+}
+
+function endQuestion(game: Game) {
+    const q = game.questions[game.currentQuestion];
+    const basePoints = 1000;
+
+    const results = game.players.map(p => {
+    const answered = p.hasAnswered ?? false;
+    const answerObj = game.playerAnswers.get(p.index);
+    const correct = answerObj?.answerIndex === q.correctIndex;
+
+    let points = 0;
+    if(answered && correct) {
+        const timeUsed = p.answerTime ?? q.timeLimitSec;
+        points = Math.floor(basePoints * ((q.timeLimitSec - timeUsed) / q.timeLimitSec));
+        p.score += points;
+    } 
+      return {
+        name: p.name,
+        answered,
+        correct,
+        pointsEarned: points,
+        totalScore: p.score
+      };
+    });
+
 }
 
 function updatePlayers(game: Game) {
