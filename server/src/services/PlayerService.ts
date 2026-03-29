@@ -19,7 +19,13 @@ class PlayerService {
   }
 
   getPlayer(ws: WebSocket) {
-    return this.players.get(ws)
+    const player = this.players.get(ws)
+
+    if (!player) {
+      throw new Error("Player not found")
+    }
+
+    return player
   }
 }
 

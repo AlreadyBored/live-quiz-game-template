@@ -15,8 +15,28 @@ export class Player implements PlayerInterface {
     this.index = index
     this.score = 0
     this.ws = ws
+  }
+
+  resetAnswerData() {
     this.hasAnswered = undefined
     this.answerTime = undefined
     this.answeredCorrectly = undefined
+  }
+
+  updatePlayerAnswerStats(answerTime: number, answeredCorrectly: boolean) {
+    this.hasAnswered = true
+    this.answerTime = answerTime
+    this.answeredCorrectly = answeredCorrectly
+  }
+
+  updatePlayerScore(questionStartTime: number, timeLimitSec: number) {
+    if (!this.answeredCorrectly || !this.answerTime) {
+      return this.score
+    }
+
+    const timeBonusModifier =
+      (this.answerTime - questionStartTime) / (timeLimitSec * 1000)
+    this.score += Math.floor(1000 * timeBonusModifier)
+    return this.score
   }
 }

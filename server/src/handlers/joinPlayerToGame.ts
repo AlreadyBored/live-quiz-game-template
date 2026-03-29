@@ -5,18 +5,9 @@ import { WSMessage } from "../types"
 
 export function joinPlayerToGame(ws: WebSocket, message: WSMessage) {
   const { code } = message.data
+
   const game = gameService.findGameByCode(String(code).toLowerCase())
-
-  if (game === undefined) {
-    throw new Error("Game not found")
-  }
-
   const player = playerService.getPlayer(ws)
-
-  if (player === undefined) {
-    throw new Error("Player not found")
-  }
-
   game.addPlayerToGame(player)
 
   return {

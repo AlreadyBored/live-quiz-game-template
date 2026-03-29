@@ -1,5 +1,11 @@
 import { WebSocket } from "ws"
-import { registerUser, createGame, joinPlayerToGame, startGame } from "./handlers/index"
+import {
+  registerUser,
+  createGame,
+  joinPlayerToGame,
+  startGame,
+  processPlayerAnswer,
+} from "./handlers/index"
 import { WSMessage } from "./types"
 
 export function processMessage(ws: WebSocket, message: WSMessage) {
@@ -14,6 +20,8 @@ export function processMessage(ws: WebSocket, message: WSMessage) {
       return joinPlayerToGame(ws, message)
     case "start_game":
       return startGame(ws, message)
+    case "answer":
+      return processPlayerAnswer(ws, message)
     default:
       break
   }

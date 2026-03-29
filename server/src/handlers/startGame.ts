@@ -7,11 +7,6 @@ export function startGame(ws: WebSocket, message: WSMessage) {
     data: { gameId },
   } = message
   const game = gameService.findGameById(gameId)
-
-  if (game === undefined) {
-    throw new Error("Game not found")
-  }
-
   game.startGame()
 
   return {

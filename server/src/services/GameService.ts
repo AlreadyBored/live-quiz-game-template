@@ -24,11 +24,23 @@ class GameService {
   }
 
   findGameByCode(code: string) {
-    return this.gamesByCode[code]
+    const game = this.gamesByCode[code]
+
+    if (!game) {
+      throw new Error("Game not found")
+    }
+
+    return game
   }
 
-  findGameById(code: string) {
-    return this.gamesById[code]
+  findGameById(id: string) {
+    const game = this.gamesById[id]
+
+    if (!game) {
+      throw new Error("Game not found")
+    }
+
+    return game
   }
 }
 

@@ -13,11 +13,6 @@ export function createGame(ws: WebSocket, message: WSMessage) {
   gameService.registerGame(game)
 
   const player = playerService.getPlayer(ws)
-
-  if (!player) {
-    throw new Error("Player not found")
-  }
-
   game.addPlayerToGame(player)
 
   return {
