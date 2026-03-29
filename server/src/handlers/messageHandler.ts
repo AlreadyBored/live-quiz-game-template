@@ -1,5 +1,5 @@
 const players = new Map<string, { name: string; index: string; score: number }>();
-const games = new Map<string, any>();
+export const games = new Map<string, any>();
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -8,7 +8,7 @@ function generateCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-const socketToPlayer = new Map<any, string>();
+export const socketToPlayer = new Map<any, string>();
 
 export function handleMessage(ws: any, message: string) {
   const parsed = JSON.parse(message);
