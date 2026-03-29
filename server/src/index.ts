@@ -1,5 +1,5 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { CreateGameData, Game, Player, RegData, User, WSMessage } from './types';
+import { CreateGameData, Game, JoinGameData, Player, RegData, User, WSMessage } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { error } from 'node:console';
 
@@ -39,6 +39,9 @@ wss.on('connection', (ws: WebSocket) => {
                break;
             case 'create game':
                 handleCreateGame(ws, data as CreateGameData, currentUserId!);
+                break;
+            case 'join game': 
+                handleJoinGame(ws, data as JoinGameData, currentUserId!);
                 break;
 
 
@@ -96,4 +99,38 @@ function handleCreateGame(ws: WebSocket, data: CreateGameData, hostId: string) {
         data: { gameId, code },
         id: 0
     }));
+}
+
+function handleJoinGame(ws: WebSocket, data: JoinGameData, playerId: string) {
+    const game = Object.values(games).find(g => g.code === data.code);
+    if(!game) {
+        return;
+    }
+   const player = players[playerId];
+   game.players.push(player);
+
+   ws.send(JSON.stringify({type: 'game_joined', data: { gameId: game.id }, id: 0 }));
+
+   broadcastToGame(game, {
+    type: 'player_joined',
+    data: { playerName: player.name, playerCount: game.players.length },
+    id: 0
+  });
+  updatePlayers(game);
+}
+
+function broadcastToGame(game: Game, msg: any) {
+    game.players.forEach(p => {
+        if (p.ws?.readyState === WebSocket.OPEN) {
+          p.ws.send(JSON.stringify(msg));
+    }
+    });
+}
+
+function updatePlayers(game: Game) {
+    broadcastToGame(game, {
+        type: 'update_players',
+        data: game.players.map(p => ({ name: p.name, index: p.index, score: p.score })),
+        id: 0
+    });
 }
