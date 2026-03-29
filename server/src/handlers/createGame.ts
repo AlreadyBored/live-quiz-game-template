@@ -1,7 +1,9 @@
+import { WebSocket } from "ws"
 import gameService from "../services/GameService"
+import playerService from "../services/PlayerService"
 import { WSMessage } from "../types"
 
-export function createGame(message: WSMessage) {
+export function createGame(ws: WebSocket, message: WSMessage) {
   const {
     id,
     data: { questions },
@@ -9,6 +11,14 @@ export function createGame(message: WSMessage) {
 
   const game = gameService.generateGame(`${id}`, questions)
   gameService.registerGame(game)
+
+  const player = playerService.getPlayer(ws)
+
+  if (!player) {
+    throw new Error("Player not found")
+  }
+
+  game.addPlayerToGame(player)
 
   return {
     type: "game_created",
